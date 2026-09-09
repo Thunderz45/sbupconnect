@@ -1,65 +1,47 @@
 import React, { useState } from 'react';
+import { GALLERY_DATA } from '../../data/appData';
 import { X, ZoomIn } from 'lucide-react';
 
-const GALLERY = [
-  { id: 1, category: 'campus',    title: 'SBUP Main Academic Quadrangle', location: 'Main Campus Pune',   image: 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&q=80&w=800', badge: 'Campus' },
-  { id: 2, category: 'campus',    title: 'Sri Balaji Central Library',     location: 'Central Library',    image: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&q=80&w=800', badge: 'Campus' },
-  { id: 3, category: 'events',    title: 'Annual Convocation Ceremony',    location: 'Grand Auditorium',   image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?auto=format&fit=crop&q=80&w=800', badge: 'Event' },
-  { id: 4, category: 'events',    title: 'SBUP Founders Day Celebration',  location: 'Amphitheatre',       image: 'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800', badge: 'Event' },
-  { id: 5, category: 'cultural',  title: 'Astitva Cultural Fest Night',    location: 'Main Ground',        image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=800', badge: 'Cultural' },
-  { id: 6, category: 'sports',    title: 'Inter-College Football Finals',  location: 'Sports Complex',     image: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=800', badge: 'Sports' },
-  { id: 7, category: 'workshops', title: 'AI & Data Science Hackathon',    location: 'Tech Lab 4',         image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800', badge: 'Workshop' },
-  { id: 8, category: 'campus',    title: 'SBUP Research Innovation Hub',   location: 'Block C',            image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800', badge: 'Campus' },
-];
-
 const FILTERS = ['all', 'campus', 'events', 'cultural', 'sports', 'workshops'];
-const BADGE_COLORS = {
-  Campus: '#0EA5E9', Event: '#8B5CF6', Cultural: '#EC4899',
-  Sports: '#EF4444', Workshop: '#F59E0B'
-};
+const BADGE_COLORS = { campus: 'badge-primary', events: 'badge-success', cultural: 'badge-purple', sports: 'badge-warning', workshops: 'badge-danger' };
 
 export default function GalleryTab() {
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter]   = useState('all');
   const [lightbox, setLightbox] = useState(null);
 
-  const filtered = GALLERY.filter(g => filter === 'all' || g.category === filter);
+  const filtered = filter === 'all' ? GALLERY_DATA : GALLERY_DATA.filter(g => g.category === filter);
 
   return (
     <div className="animate-fadeIn">
       <div className="page-header">
         <div className="page-title">Campus Gallery</div>
-        <div className="page-sub">Memories from Sri Balaji University Pune</div>
+        <div className="page-sub">Photos from campus life, events, and academic activities</div>
       </div>
 
-      <div className="notes-filter">
+      {/* Filters */}
+      <div className="filter-chips">
         {FILTERS.map(f => (
-          <button
-            key={f}
-            className={`filter-chip ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+          <button key={f} className={`filter-chip ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+            {f === 'all' ? 'All Photos' : f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
       </div>
 
+      {/* Grid */}
       <div className="gallery-grid">
         {filtered.map(item => (
           <div key={item.id} className="gallery-item" onClick={() => setLightbox(item)}>
             <img src={item.image} alt={item.title} loading="lazy" />
             <div className="gallery-overlay">
-              <span className="badge" style={{ marginBottom: 6, background: BADGE_COLORS[item.badge], color: '#fff', fontSize: 10 }}>
+              <span className={`badge ${BADGE_COLORS[item.category] || 'badge-primary'}`} style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', fontSize: 9, marginBottom: 6, alignSelf: 'flex-start' }}>
                 {item.badge}
               </span>
-              <div className="gallery-title">{item.title}</div>
-              <div className="gallery-loc">📍 {item.location}</div>
+              <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 13, lineHeight: 1.3, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{item.title}</div>
+              <div style={{ fontSize: 11, opacity: 0.75, marginTop: 3 }}>{item.location} · {item.date}</div>
             </div>
-            <div style={{
-              position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 8,
-              background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
-            }}>
-              <ZoomIn size={16} />
+            <div style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 7, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', opacity: 0, transition: '0.2s' }}
+              className="zoom-icon">
+              <ZoomIn size={13} />
             </div>
           </div>
         ))}
@@ -67,28 +49,17 @@ export default function GalleryTab() {
 
       {/* Lightbox */}
       {lightbox && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.95)', zIndex: 999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
-          }}
-          onClick={() => setLightbox(null)}
-        >
-          <div style={{ position: 'relative', maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
-            <img
-              src={lightbox.image} alt={lightbox.title}
-              style={{ width: '100%', borderRadius: 16, maxHeight: '80vh', objectFit: 'contain' }}
-            />
-            <div style={{ marginTop: 16, color: '#fff', textAlign: 'center' }}>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{lightbox.title}</div>
-              <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>📍 {lightbox.location}</div>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, backdropFilter: 'blur(12px)' }}
+          onClick={() => setLightbox(null)}>
+          <button style={{ position: 'absolute', top: 16, right: 16, width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <X size={20} />
+          </button>
+          <div style={{ maxWidth: 800, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <img src={lightbox.image} alt={lightbox.title} style={{ width: '100%', borderRadius: 16, boxShadow: '0 32px 80px rgba(0,0,0,0.5)' }} />
+            <div style={{ color: '#fff', marginTop: 16, padding: '0 4px' }}>
+              <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 17 }}>{lightbox.title}</div>
+              <div style={{ fontSize: 13, opacity: 0.65, marginTop: 4 }}>{lightbox.location} · {lightbox.date}</div>
             </div>
-            <button
-              style={{ position: 'absolute', top: -16, right: -16, width: 36, height: 36, borderRadius: 99, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}
-              onClick={() => setLightbox(null)}
-            >
-              <X size={18} color="var(--navy)" />
-            </button>
           </div>
         </div>
       )}

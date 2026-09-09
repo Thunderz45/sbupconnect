@@ -1,104 +1,76 @@
 import React, { useState } from 'react';
-import { FileText, Download, Search, Filter } from 'lucide-react';
+import { NOTES_DATA } from '../../data/appData';
+import { FileText, Search, Download, Eye } from 'lucide-react';
 
-const NOTES = [
-  { id: 1, title: 'Machine Learning Algorithms & Python Scikit-Learn.pdf', subject: 'Data Science', date: '05 Sep 2026', author: 'Prof. R. Deshmukh', size: '4.2 MB', category: 'datascience' },
-  { id: 2, title: 'SQL Indexing & Advanced Query Optimization.pdf', subject: 'Business Analytics', date: '02 Sep 2026', author: 'Dr. Swati Kulkarni', size: '2.8 MB', category: 'analytics' },
-  { id: 3, title: 'Financial Risk Modeling & VaR Formula Guide.pdf', subject: 'Finance Analytics', date: '28 Aug 2026', author: 'Prof. Vikram Patil', size: '5.1 MB', category: 'finance' },
-  { id: 4, title: 'Digital Marketing Metrics & Google Analytics 4.pdf', subject: 'Marketing', date: '25 Aug 2026', author: 'Dr. Ananya Roy', size: '3.4 MB', category: 'marketing' },
-  { id: 5, title: 'People Analytics & HR Metrics Workbook.pdf', subject: 'Human Resources', date: '20 Aug 2026', author: 'Prof. S. Mehta', size: '1.9 MB', category: 'hr' },
-  { id: 6, title: 'Autonomous AI Agents & Vector RAG Notes.pdf', subject: 'Computer Science', date: '15 Aug 2026', author: 'Dr. P. Varma', size: '6.5 MB', category: 'cs' },
-];
+const CATEGORIES = ['all', 'datascience', 'analytics', 'finance', 'marketing', 'hr', 'cs'];
+const CAT_LABELS = { all: 'All', datascience: 'Data Science', analytics: 'Analytics', finance: 'Finance', marketing: 'Marketing', hr: 'HR', cs: 'Computer Science' };
 
-const FILTERS = [
-  { id: 'all', label: 'All Notes' },
-  { id: 'datascience', label: 'Data Science' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'finance', label: 'Finance' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'hr', label: 'HR' },
-  { id: 'cs', label: 'CS' },
-];
-
-const COLORS = {
-  datascience: { bg: '#E0F2FE', color: '#0369A1' },
-  analytics:   { bg: '#EDE9FE', color: '#7C3AED' },
-  finance:     { bg: '#D1FAE5', color: '#065F46' },
-  marketing:   { bg: '#FEF3C7', color: '#92400E' },
-  hr:          { bg: '#FCE7F3', color: '#9D174D' },
-  cs:          { bg: '#FEE2E2', color: '#991B1B' },
-};
+const CAT_BADGE = { datascience: 'badge-primary', analytics: 'badge-success', finance: 'badge-warning', marketing: 'badge-danger', hr: 'badge-purple', cs: 'badge-primary' };
 
 export default function NotesTab() {
-  const [filter, setFilter]   = useState('all');
-  const [search, setSearch]   = useState('');
+  const [cat, setCat]       = useState('all');
+  const [search, setSearch] = useState('');
 
-  const filtered = NOTES.filter(n => {
-    const matchCat = filter === 'all' || n.category === filter;
-    const matchSearch = n.title.toLowerCase().includes(search.toLowerCase()) ||
-                        n.subject.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  const filtered = NOTES_DATA
+    .filter(n => cat === 'all' || n.category === cat)
+    .filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase()) || n.subject.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="animate-fadeIn">
       <div className="page-header">
-        <div className="page-title">Study Notes</div>
-        <div className="page-sub">Download lecture notes and study materials</div>
+        <div className="page-title">Notes & PDFs</div>
+        <div className="page-sub">Study materials, lecture notes and course resources</div>
       </div>
 
       {/* Search */}
       <div className="search-bar">
-        <Search size={16} color="var(--navy-400)" />
-        <input
-          placeholder="Search notes by title or subject…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <Search size={16} color="var(--muted)" />
+        <input placeholder="Search notes, subjects or authors…" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Filter chips */}
-      <div className="notes-filter">
-        {FILTERS.map(f => (
-          <button
-            key={f.id}
-            className={`filter-chip ${filter === f.id ? 'active' : ''}`}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
+      {/* Filters */}
+      <div className="filter-chips">
+        {CATEGORIES.map(c => (
+          <button key={c} className={`filter-chip ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>
+            {CAT_LABELS[c]}
           </button>
         ))}
       </div>
 
-      {/* Notes list */}
+      {/* Grid */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--navy-400)' }}>
-          <FileText size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
-          <div style={{ fontWeight: 600 }}>No notes found</div>
+        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
+          <FileText size={48} style={{ display: 'block', margin: '0 auto 12px', opacity: 0.3 }} />
+          No notes found.
         </div>
       ) : (
-        filtered.map(note => {
-          const c = COLORS[note.category] || { bg: '#E0F2FE', color: '#0369A1' };
-          return (
-            <div key={note.id} className="note-item">
-              <div className="note-icon" style={{ background: c.bg, color: c.color }}>
-                <FileText size={22} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="note-title"
-                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {note.title}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          {filtered.map(note => (
+            <div key={note.id} className="note-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EFF6FF', color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileText size={16} />
                 </div>
-                <div className="note-meta">
-                  {note.subject} · {note.author} · {note.date} · {note.size}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className={`badge ${CAT_BADGE[note.category] || 'badge-primary'}`} style={{ fontSize: 10 }}>{note.subject}</span>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--muted)' }}>{note.size}</span>
                 </div>
               </div>
-              <button className="btn btn-primary btn-sm">
-                <Download size={14} /> Download
-              </button>
+              <div>
+                <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 13, color: 'var(--navy)', lineHeight: 1.35 }}>{note.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>By {note.author} · {note.date}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <button style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <Eye size={13} /> Preview
+                </button>
+                <button style={{ display: 'flex', alignItems: 'center', gap: 5, height: 30, padding: '0 12px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  <Download size={13} /> Download
+                </button>
+              </div>
             </div>
-          );
-        })
+          ))}
+        </div>
       )}
     </div>
   );

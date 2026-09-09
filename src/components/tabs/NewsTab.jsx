@@ -1,68 +1,70 @@
 import React, { useState } from 'react';
-import { Newspaper, ExternalLink } from 'lucide-react';
+import { NEWS_DATA } from '../../data/appData';
+import { X } from 'lucide-react';
 
-const NEWS = [
-  { id: 0, title: 'India AI Mission Allocates Rs.10,000 Crore for University Labs', category: 'Technology', source: 'Economic Times', date: '07 Sep 2026', image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800', summary: 'National Supercomputing Initiative expands GPU availability to top higher education institutes.', body: 'The Union Cabinet has approved the deployment of high-performance GPU clusters across 100 premier universities.' },
-  { id: 1, title: 'RBI Projects 7.2% GDP Growth Driven by Services & Data Technology', category: 'Business', source: 'Financial Express', date: '07 Sep 2026', image: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=800', summary: 'Monetary Policy Committee highlights robust domestic consumption and tech hiring.', body: 'The Reserve Bank of India retained its optimistic GDP projection of 7.2% for FY27.' },
-  { id: 2, title: 'ISRO Successfully Tests Next-Generation Heavy Payload Rocket Booster', category: 'India', source: 'The Hindu', date: '06 Sep 2026', image: 'https://images.unsplash.com/photo-1517976487492-5750f3195933?auto=format&fit=crop&q=80&w=800', summary: 'Sriharikota spaceport completes ground test firing of indigenous cryogenic engine.', body: 'ISRO achieved a milestone with the 500-second endurance test of its CE-20 cryogenic engine.' },
-  { id: 3, title: 'Global Tech Summit: Focus on Ethical AI & Data Sovereignty', category: 'World', source: 'Reuters', date: '05 Sep 2026', image: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800', summary: 'Delegates from 40 nations sign international AI safety framework.', body: 'International tech leaders aligned on new privacy compliance benchmarks.' },
-  { id: 4, title: 'Indian Cricket Team Secures T20 Series Victory in Final Over Thriller', category: 'Sports', source: 'SportsStar', date: '06 Sep 2026', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&q=80&w=800', summary: 'Spectacular bowling performance in the death overs seals a dramatic 12-run win.', body: 'A packed stadium witnessed an exhilarating finish as India defended 185 runs.' },
-  { id: 5, title: 'Startup India Fund: Rs. 500 Cr Allocated for Campus Incubation Hubs', category: 'Business', source: 'LiveMint', date: '05 Sep 2026', image: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&q=80&w=800', summary: 'DPIIT partners with 50 universities to set up state-of-the-art innovation centres.', body: 'New campus-based incubators to support early-stage ventures with seed funding.' },
-];
-
-const CATS = ['All', 'Technology', 'Business', 'India', 'World', 'Sports'];
-
-const CAT_COLORS = {
-  Technology: '#0EA5E9', Business: '#10B981', India: '#F59E0B',
-  World: '#8B5CF6', Sports: '#EF4444',
-};
+const FILTERS = ['all', 'tech', 'business', 'india', 'world', 'sports'];
+const CAT_LABELS = { all: 'All', tech: 'Technology', business: 'Business', india: 'India', world: 'World', sports: 'Sports' };
 
 export default function NewsTab() {
-  const [filter, setFilter] = useState('All');
-  const [expanded, setExpanded] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [detail, setDetail] = useState(null);
 
-  const filtered = NEWS.filter(n => filter === 'All' || n.category === filter);
+  const filtered = filter === 'all' ? NEWS_DATA : NEWS_DATA.filter(n => n.category === filter);
 
   return (
     <div className="animate-fadeIn">
       <div className="page-header">
         <div className="page-title">News Feed</div>
-        <div className="page-sub">Latest news curated for SBUP students</div>
+        <div className="page-sub">Curated campus and national news</div>
       </div>
 
-      <div className="notes-filter">
-        {CATS.map(cat => (
-          <button
-            key={cat}
-            className={`filter-chip ${filter === cat ? 'active' : ''}`}
-            onClick={() => setFilter(cat)}
-          >
-            {cat}
+      {/* Filters */}
+      <div className="filter-chips">
+        {FILTERS.map(f => (
+          <button key={f} className={`filter-chip ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+            {CAT_LABELS[f]}
           </button>
         ))}
       </div>
 
+      {/* Grid */}
       <div className="news-grid">
-        {filtered.map(article => (
-          <div key={article.id} className="news-card" onClick={() => setExpanded(expanded === article.id ? null : article.id)}>
-            <img src={article.image} alt={article.title} loading="lazy" />
-            <div className="news-card-body">
-              <div className="news-source" style={{ color: CAT_COLORS[article.category] }}>
-                {article.category} · {article.source} · {article.date}
+        {filtered.map(news => (
+          <div key={news.id} className="news-card" onClick={() => setDetail(news)}>
+            <img src={news.image} alt={news.title} />
+            <div style={{ padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span className="badge badge-primary" style={{ fontSize: 10 }}>{news.categoryLabel}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{news.date}</span>
               </div>
-              <div className="news-headline">{article.title}</div>
-              <div className="news-excerpt">
-                {expanded === article.id ? article.body : article.summary}
-              </div>
-              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--sky-600)' }}>
-                  {expanded === article.id ? 'Show less' : 'Read more'} <ExternalLink size={12} />
-                </button>
-              </div>
+              <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 13, color: 'var(--navy)', lineHeight: 1.4, marginBottom: 6 }}>{news.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--slate)', lineHeight: 1.6 }}>{news.summary}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', marginTop: 8 }}>{news.source}</div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Detail modal */}
+      {detail && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, backdropFilter: 'blur(8px)' }}
+          onClick={() => setDetail(null)}>
+          <div style={{ background: '#fff', borderRadius: 20, maxWidth: 600, width: '100%', overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 32px 80px rgba(0,0,0,0.3)' }}
+            onClick={e => e.stopPropagation()}>
+            <img src={detail.image} alt={detail.title} style={{ width: '100%', height: 220, objectFit: 'cover' }} />
+            <div style={{ padding: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span className="badge badge-primary" style={{ fontSize: 11 }}>{detail.categoryLabel}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{detail.date}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', marginLeft: 'auto' }}>{detail.source}</span>
+              </div>
+              <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 18, color: 'var(--navy)', lineHeight: 1.4, marginBottom: 14 }}>{detail.title}</div>
+              <div style={{ fontSize: 14, color: 'var(--slate)', lineHeight: 1.7 }}>{detail.body}</div>
+              <button onClick={() => setDetail(null)} style={{ marginTop: 20, padding: '11px 24px', background: 'var(--bg-soft)', border: '1.5px solid var(--border)', borderRadius: 12, fontSize: 14, fontWeight: 700, color: 'var(--slate)', cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

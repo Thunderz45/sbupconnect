@@ -1,78 +1,78 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import {
-  Home, BookOpen, Clock, Bell, Hotel, Newspaper,
-  Image, User, Settings, LogOut, GraduationCap, ChevronRight
-} from 'lucide-react';
+import { useNotices } from '../../context/NoticesContext';
+import { LayoutDashboard, FileText, Calendar, Bell, PieChart, Newspaper, Images, Home, User, Settings, X } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { id: 'home',      label: 'Home',        icon: Home       },
-  { id: 'notices',   label: 'Notices',     icon: Bell       },
-  { id: 'notes',     label: 'Notes',       icon: BookOpen   },
-  { id: 'timetable', label: 'Timetable',   icon: Clock      },
-  { id: 'news',      label: 'News',        icon: Newspaper  },
-  { id: 'gallery',   label: 'Gallery',     icon: Image      },
-  { id: 'profile',   label: 'Profile',     icon: User       },
+const NAV = [
+  { id: 'home',       label: 'Dashboard',   icon: LayoutDashboard, group: 'Portal' },
+  { id: 'notes',      label: 'Notes & PDFs', icon: FileText,       group: 'Portal' },
+  { id: 'timetable',  label: 'Timetable',    icon: Calendar,       group: 'Portal' },
+  { id: 'notices',    label: 'Notices',      icon: Bell,           group: 'Portal', badge: true },
+  { id: 'attendance', label: 'Attendance',   icon: PieChart,       group: 'Portal' },
+  { id: 'news',       label: 'News Feed',    icon: Newspaper,      group: 'Portal' },
+  { id: 'gallery',    label: 'Campus Gallery',icon: Images,        group: 'Campus' },
+  { id: 'hostel',     label: 'Hostel & Mess', icon: Home,          group: 'Campus', hostelOnly: true },
+  { id: 'profile',    label: 'My Profile',   icon: User,           group: 'Account' },
+  { id: 'settings',   label: 'Settings',     icon: Settings,       group: 'Account' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, isOpen, onClose }) {
-  const { student, logout } = useAuth();
+  const { student } = useAuth();
+  const { unreadCount } = useNotices();
 
-  const initials = (student?.name || 'S')
-    .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-
-  const isHostel = student?.hostel === 'Hostel Resident';
-
-  const navItems = isHostel
-    ? [...NAV_ITEMS.slice(0, 6), { id: 'hostel', label: 'Hostel', icon: Hotel }, NAV_ITEMS[6]]
-    : NAV_ITEMS;
+  const isHostel  = student?.hostel === 'Hostel Resident';
+  const initials  = (student?.name || 'S').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const groups    = [...new Set(NAV.map(n => n.group))];
 
   return (
     <>
+      {/* Overlay */}
       <div className={`sidebar-overlay ${isOpen ? 'show' : ''}`} onClick={onClose} />
+
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         {/* Profile */}
-        <div className="sidebar-top">
+        <div style={{ padding: '14px 12px 6px' }}>
           <div className="sidebar-profile">
-            <div className="avatar">{initials}</div>
-            <div>
-              <div className="name">{student?.name || 'Student'}</div>
+            <div className="sb-avatar">{initials}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="name">{student?.name}</div>
               <div className="dept">{student?.institute} · {student?.spec?.split(' ').slice(0, 2).join(' ')}</div>
-              {isHostel && (
-                <span className="badge badge-primary" style={{ marginTop: 4 }}>
-                  Hostel Resident
-                </span>
-              )}
             </div>
+            <button onClick={onClose} style={{ display: 'none' }} className="close-sb">
+              <X size={16} />
+            </button>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="sidebar-nav">
-          <div className="nav-group-label">Navigation</div>
-          {navItems.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              className={`nav-item ${activeTab === id ? 'active' : ''}`}
-              onClick={() => { onTabChange(id); onClose(); }}
-            >
-              <Icon size={18} />
-              {label}
-              {id === 'notices' && <span className="badge badge-danger" style={{ marginLeft: 'auto', fontSize: 10 }}>4</span>}
-            </button>
-          ))}
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '4px 10px 16px', overflowY: 'auto' }}>
+          {groups.map(group => {
+            const items = NAV.filter(n => n.group === group && (!n.hostelOnly || isHostel));
+            if (items.length === 0) return null;
+            return (
+              <div key={group}>
+                <div className="nav-group-label">{group}</div>
+                {items.map(({ id, label, icon: Icon, badge, hostelOnly }) => (
+                  <button key={id}
+                    className={`nav-item ${activeTab === id ? 'active' : ''}`}
+                    onClick={() => { onTabChange(id); onClose(); }}>
+                    <Icon size={16} style={{ flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>{label}</span>
+                    {badge && unreadCount > 0 && (
+                      <span style={{ padding: '1px 7px', background: '#EF4444', color: '#fff', borderRadius: 99, fontSize: 10, fontWeight: 800 }}>
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Footer */}
-        <div className="sidebar-footer">
-          <button
-            className="nav-item"
-            style={{ color: '#EF4444', width: '100%' }}
-            onClick={logout}
-          >
-            <LogOut size={18} />
-            Logout
-          </button>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--muted)', textAlign: 'center' }}>
+          SBUP Connect v2.0 · {new Date().getFullYear()}
         </div>
       </aside>
     </>

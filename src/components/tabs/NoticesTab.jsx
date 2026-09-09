@@ -1,112 +1,103 @@
 import React, { useState } from 'react';
-import { Bell, CheckCheck, X, ChevronDown, ChevronUp } from 'lucide-react';
-
-const INITIAL_NOTICES = [
-  { id: 1, title: 'Mid-Term Examination Hall Ticket Generation Active', category: 'Academic', priority: 'Important', date: 'Today, 09:30 AM', author: 'Examination Cell SBUP', isRead: false, body: 'All Sem 4 students of BIMM, BITM, BIIB & BIMHRD can now download their official mid-term examination hall tickets. Hall tickets must be printed and stamped by the institute office before 10 Sep 2026.' },
-  { id: 2, title: 'Campus Placement Drive: Deloitte US-India & KPMG', category: 'Placement', priority: 'Important', date: 'Yesterday', author: 'Corporate Relations & Placement Cell', isRead: false, body: 'Pre-placement talk and online technical test for Data Science & Finance specializations will take place in the Main Auditorium tomorrow at 10:00 AM. Attendance is mandatory for shortlisted candidates.' },
-  { id: 3, title: 'SBUP Annual Cultural Fest 2026 Registrations Open', category: 'Events', priority: 'Normal', date: '04 Sep 2026', author: 'Student Cultural Committee', isRead: false, body: 'Registrations for music, band, street play, and dance competitions for Astitva Cultural Fest 2026 are now open. Prize pool of Rs. 2.5 Lakhs across categories.' },
-  { id: 4, title: 'Hostel Night Entry Timings & Gate Pass Circular', category: 'Hostel', priority: 'Important', date: '02 Sep 2026', author: 'Chief Rector & Hostel Office', isRead: false, body: 'Students leaving campus post 08:30 PM must submit an online Gate Pass Request through the SBUP Connect portal. Gate passes must be approved by the hostel warden prior to exit.' },
-];
+import { useNotices } from '../../context/NoticesContext';
+import { CheckCircle, ChevronDown, ChevronUp, Download, Bell } from 'lucide-react';
 
 const CAT_COLORS = {
-  Academic:  { bg: '#E0F2FE', color: '#0369A1' },
-  Placement: { bg: '#EDE9FE', color: '#7C3AED' },
-  Events:    { bg: '#D1FAE5', color: '#065F46' },
-  Hostel:    { bg: '#FEF3C7', color: '#92400E' },
+  Academic: { chip: 'badge-primary', dot: '#0EA5E9' },
+  Placement: { chip: 'badge-purple', dot: '#8B5CF6' },
+  Events: { chip: 'badge-success', dot: '#10B981' },
+  Hostel: { chip: 'badge-warning', dot: '#F59E0B' },
 };
 
 export default function NoticesTab() {
-  const [notices, setNotices] = useState(INITIAL_NOTICES);
+  const { notices, markRead, markAllRead, unreadCount } = useNotices();
   const [expanded, setExpanded] = useState(null);
   const [filter, setFilter] = useState('all');
 
-  const markRead = (id) => setNotices(n => n.map(x => x.id === id ? { ...x, isRead: true } : x));
-  const markAllRead = () => setNotices(n => n.map(x => ({ ...x, isRead: true })));
+  const cats = ['all', 'Academic', 'Placement', 'Events', 'Hostel'];
+  const filtered = filter === 'all' ? notices : notices.filter(n => n.category === filter);
 
-  const unreadCount = notices.filter(n => !n.isRead).length;
-  const categories = ['all', ...new Set(notices.map(n => n.category))];
-  const filtered = notices.filter(n => filter === 'all' || n.category === filter);
+  const handleExpand = (id) => {
+    setExpanded(v => v === id ? null : id);
+    markRead(id);
+  };
 
   return (
     <div className="animate-fadeIn">
-      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            Notices
-            {unreadCount > 0 && <span className="badge badge-danger">{unreadCount} Unread</span>}
-          </div>
-          <div className="page-sub">Official announcements from SBUP</div>
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="page-title">Notices</div>
+          {unreadCount > 0 && (
+            <span className="badge badge-danger">{unreadCount} Unread</span>
+          )}
         </div>
-        {unreadCount > 0 && (
-          <button className="btn btn-outline btn-sm" onClick={markAllRead}>
-            <CheckCheck size={14} /> Mark all read
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+          <div className="page-sub">Official academic notices and announcements</div>
+          {unreadCount > 0 && (
+            <button onClick={markAllRead} style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <CheckCircle size={14} /> Mark all read
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Category filter */}
-      <div className="notes-filter">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            className={`filter-chip ${filter === cat ? 'active' : ''}`}
-            onClick={() => setFilter(cat)}
-          >
-            {cat === 'all' ? 'All' : cat}
+      {/* Category filters */}
+      <div className="filter-chips">
+        {cats.map(cat => (
+          <button key={cat} className={`filter-chip ${filter === cat ? 'active' : ''}`} onClick={() => setFilter(cat)}>
+            {cat === 'all' ? 'All Notices' : cat}
           </button>
         ))}
       </div>
 
-      {/* Notices */}
+      {/* Notices list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map(notice => {
-          const c = CAT_COLORS[notice.category] || { bg: '#E0F2FE', color: '#0369A1' };
-          const isExpanded = expanded === notice.id;
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
+            <Bell size={48} style={{ display: 'block', margin: '0 auto 12px', opacity: 0.3 }} />
+            No notices in this category.
+          </div>
+        ) : filtered.map(n => {
+          const colors = CAT_COLORS[n.category] || { chip: 'badge-primary', dot: '#0EA5E9' };
           return (
-            <div
-              key={notice.id}
-              className={`notice-card ${!notice.isRead ? 'unread' : ''}`}
-              onClick={() => { setExpanded(isExpanded ? null : notice.id); markRead(notice.id); }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 10, background: c.bg, color: c.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2
-                }}>
-                  <Bell size={18} />
+            <div key={n.id} className="dash-card" style={{ borderLeft: `3px solid ${n.isRead ? '#E2E8F0' : colors.dot}`, background: n.isRead ? '#fff' : 'rgba(14,165,233,0.025)' }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={`badge ${colors.chip}`}>{n.category}</span>
+                  {n.priority === 'Important' && <span className="badge badge-warning">High Priority</span>}
+                  {!n.isRead && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }} />}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <span className="badge" style={{ background: c.bg, color: c.color }}>{notice.category}</span>
-                    {notice.priority === 'Important' && <span className="badge badge-danger">Important</span>}
-                    {!notice.isRead && <span className="badge badge-primary">New</span>}
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)', lineHeight: 1.4 }}>
-                    {notice.title}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--navy-500)', marginTop: 4 }}>
-                    {notice.author} · {notice.date}
-                  </div>
-                  {isExpanded && (
-                    <div style={{ marginTop: 12, fontSize: 14, color: 'var(--navy-700)', lineHeight: 1.6 }}>
-                      {notice.body}
-                    </div>
-                  )}
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{n.date}</span>
+              </div>
+
+              <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 15, color: 'var(--navy)', marginBottom: 6, cursor: 'pointer' }}
+                onClick={() => handleExpand(n.id)}>
+                {n.title}
+              </div>
+
+              {/* Expandable body */}
+              {expanded === n.id && (
+                <div style={{ fontSize: 14, color: 'var(--slate)', lineHeight: 1.7, marginBottom: 12, borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                  {n.body}
                 </div>
-                <div style={{ color: 'var(--navy-400)', flexShrink: 0, marginTop: 2 }}>
-                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              )}
+
+              {/* Footer */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)' }}>
+                <span>Issued by <strong style={{ color: 'var(--navy)' }}>{n.author}</strong></span>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => handleExpand(n.id)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    {expanded === n.id ? <><ChevronUp size={13} /> Collapse</> : <><ChevronDown size={13} /> Read More</>}
+                  </button>
+                  <button style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    <Download size={13} /> Download
+                  </button>
                 </div>
               </div>
             </div>
           );
         })}
-
-        {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--navy-400)' }}>
-            <Bell size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
-            <div style={{ fontWeight: 600 }}>No notices in this category</div>
-          </div>
-        )}
       </div>
     </div>
   );
