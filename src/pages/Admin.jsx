@@ -61,11 +61,8 @@ export default function Admin() {
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [studentForm, setStudentForm] = useState({
-    name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1'
+    name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1', attendance: 85
   });
-
-  const [showAddAttendanceModal, setShowAddAttendanceModal] = useState(false);
-  const [attForm, setAttForm] = useState({ rollNumber: '', studentName: '', institute: 'BIMM', specialization: '', attendance: 85 });
 
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [noteForm, setNoteForm] = useState({
@@ -161,13 +158,30 @@ export default function Admin() {
       return;
     }
 
+    const cleanRoll = String(studentForm.rollNumber).trim();
+    const attVal = Math.min(100, Math.max(0, parseInt(studentForm.attendance) || 85));
+
     if (editingStudent) {
-      await updateStudent(editingStudent.rollNumber, studentForm);
-      showToast('Student details updated');
+      await updateStudent(editingStudent.rollNumber, { ...studentForm, attendance: attVal });
+      await setSingleStudentAttendance(editingStudent.rollNumber, {
+        studentName: studentForm.name,
+        rollNumber: editingStudent.rollNumber,
+        institute: studentForm.institute,
+        specialization: studentForm.specialization,
+        attendance: attVal
+      });
+      showToast('Student details & attendance updated successfully');
     } else {
-      const res = await addStudent(studentForm);
+      const res = await addStudent({ ...studentForm, rollNumber: cleanRoll, attendance: attVal });
       if (res.success) {
-        showToast('Student added successfully to university roster');
+        await setSingleStudentAttendance(cleanRoll, {
+          studentName: studentForm.name,
+          rollNumber: cleanRoll,
+          institute: studentForm.institute,
+          specialization: studentForm.specialization,
+          attendance: attVal
+        });
+        showToast('Student and attendance record added to roster');
       } else {
         showToast(res.error, 'error');
         return;
@@ -176,7 +190,7 @@ export default function Admin() {
 
     setShowAddStudentModal(false);
     setEditingStudent(null);
-    setStudentForm({ name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1' });
+    setStudentForm({ name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1', attendance: 85 });
     await loadAllData();
   };
 
@@ -201,98 +215,48 @@ export default function Admin() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws);
 
-      const mapped = rows.map(r => ({
-        name: (r['Student Name'] || r['Name'] || r['name'] || '').toString().trim(),
-        rollNumber: (r['Roll Number'] || r['Roll No'] || r['rollno'] || r['PRN'] || '').toString().trim(),
-        institute: (r['Institute'] || r['Institute Code'] || 'BIMM').toString().trim(),
-        specialization: (r['Specialization'] || r['Branch'] || 'Data Science and Business Analytics').toString().trim(),
-        semester: (r['Semester'] || r['Term'] || 'Semester 1').toString().trim()
-      })).filter(r => r.rollNumber && r.name);
+      const mapped = rows.map(r => {
+        const rawAtt = (r['Attendance %'] || r['Attendance'] || r['Percentage'] || r['attendance'] || '85').toString().replace('%', '').trim();
+        const attVal = Math.min(100, Math.max(0, parseInt(rawAtt) || 85));
+        return {
+          name: (r['Student Name'] || r['Name'] || r['name'] || '').toString().trim(),
+          rollNumber: (r['Roll Number'] || r['Roll No'] || r['rollno'] || r['PRN'] || '').toString().trim(),
+          institute: (r['Institute'] || r['Institute Code'] || 'BIMM').toString().trim(),
+          specialization: (r['Specialization'] || r['Branch'] || 'Data Science and Business Analytics').toString().trim(),
+          semester: (r['Semester'] || r['Term'] || 'Semester 1').toString().trim(),
+          attendance: attVal
+        };
+      }).filter(r => r.rollNumber && r.name);
 
       if (mapped.length === 0) {
-        showToast('No valid rows found. Ensure columns: Student Name, Roll Number, Institute, Specialization', 'error');
+        showToast('No valid rows found. Ensure columns: Student Name, Roll Number, Institute, Specialization, Attendance %', 'error');
         e.target.value = '';
         return;
       }
 
       const res = await batchUploadStudentList(mapped);
+      // Batch sync attendance directly with student import
+      const attRows = mapped.map(s => ({
+        rollNumber: s.rollNumber,
+        studentName: s.name,
+        institute: s.institute,
+        specialization: s.specialization,
+        attendance: s.attendance
+      }));
+      await batchUploadAttendance(attRows);
+
       setStudentUploadReport({
         total: mapped.length,
         importedCount: res.importedCount,
         time: new Date().toLocaleTimeString()
       });
 
-      showToast(`Imported ${res.importedCount} student records successfully!`);
+      showToast(`Imported ${res.importedCount} students with attendance percentages successfully!`);
       await loadAllData();
     } catch (err) {
       showToast('Import error: ' + err.message, 'error');
     }
     e.target.value = '';
-  };
-
-  // ── Attendance Actions ───────────────────────────────────────
-  const handleAttendanceExcelImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
-
-      const mapped = rows.map(r => {
-        const rn = (r['Roll Number'] || r['Roll No'] || r['rollno'] || r['PRN'] || '').toString().trim();
-        // find student metadata if available
-        const sMatch = students.find(s => String(s.rollNumber).trim() === rn);
-        return {
-          studentName: (r['Student Name'] || r['Name'] || r['name'] || sMatch?.name || '').toString().trim(),
-          rollNumber: rn,
-          institute: (r['Institute'] || sMatch?.institute || 'BIMM').toString().trim(),
-          specialization: (r['Specialization'] || sMatch?.specialization || '').toString().trim(),
-          attendance: (r['Attendance'] || r['Attendance %'] || r['Percentage'] || r['attendance'] || '0').toString().trim()
-        };
-      }).filter(r => r.rollNumber);
-
-      if (mapped.length === 0) {
-        showToast('No valid rows found. Ensure columns: Roll Number, Attendance %, Student Name', 'error');
-        e.target.value = '';
-        return;
-      }
-
-      const res = await batchUploadAttendance(mapped);
-      setAttUploadReport({
-        total: mapped.length,
-        successCount: res.successCount,
-        failedCount: res.failedCount,
-        time: new Date().toLocaleTimeString()
-      });
-
-      showToast(`Attendance updated: ${res.successCount} records synced!`);
-      await loadAllData();
-    } catch (err) {
-      showToast('Attendance import error: ' + err.message, 'error');
-    }
-    e.target.value = '';
-  };
-
-  const handleSaveSingleAttendance = async (e) => {
-    e.preventDefault();
-    if (!attForm.rollNumber) {
-      showToast('Roll number is required', 'error');
-      return;
-    }
-    await setSingleStudentAttendance(
-      attForm.rollNumber,
-      attForm.attendance,
-      attForm.studentName,
-      attForm.institute,
-      attForm.specialization
-    );
-    showToast(`Attendance updated for ${attForm.rollNumber}`);
-    setShowAddAttendanceModal(false);
-    setAttForm({ rollNumber: '', studentName: '', institute: 'BIMM', specialization: '', attendance: 85 });
-    await loadAllData();
   };
 
   // ── Notes Actions ────────────────────────────────────────────
@@ -616,8 +580,7 @@ export default function Admin() {
             <nav style={{ padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
               {[
                 { id: 'dashboard', label: 'Overview', icon: Users },
-                { id: 'students', label: 'Students Roster', icon: UserCheck },
-                { id: 'attendance', label: 'Attendance Records', icon: CheckCircle2 },
+                { id: 'students', label: 'Students & Attendance', icon: UserCheck },
                 { id: 'notes', label: 'Course Notes', icon: FileText },
                 { id: 'timetable', label: 'Schedules / Timetable', icon: Clock },
                 { id: 'notices', label: 'Official Notices', icon: Bell },
@@ -687,8 +650,7 @@ export default function Admin() {
             <div>
               <h1 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 18, fontWeight: 900, color: 'var(--navy)' }}>
                 {activeTab === 'dashboard' ? 'Admin Overview' :
-                 activeTab === 'students' ? 'Students Management' :
-                 activeTab === 'attendance' ? 'Attendance Management' :
+                 activeTab === 'students' ? 'Students & Attendance Management' :
                  activeTab === 'notes' ? 'Course Notes Publishing' :
                  activeTab === 'timetable' ? 'Timetable & Schedules' :
                  activeTab === 'notices' ? 'Official Notices & Circulars' :
@@ -801,7 +763,12 @@ export default function Admin() {
                 <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)', marginBottom: 16 }}>Quick Administrative Actions</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
                   <button
-                    onClick={() => { setActiveTab('students'); setShowAddStudentModal(true); }}
+                    onClick={() => {
+                      setEditingStudent(null);
+                      setStudentForm({ name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1', attendance: 85 });
+                      setActiveTab('students');
+                      setShowAddStudentModal(true);
+                    }}
                     className="btn btn-primary"
                     style={{ justifyContent: 'center', padding: '12px 16px', borderRadius: 12 }}
                   >
@@ -896,21 +863,8 @@ export default function Admin() {
                   >
                     <Download size={18} color="#0284C7" style={{ flexShrink: 0 }} />
                     <div style={{ textAlign: 'left' }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Student Roster Sample</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Name, Roll No, Institute, Specialization</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => downloadSampleExcel('attendance')}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
-                  >
-                    <Download size={18} color="#10B981" style={{ flexShrink: 0 }} />
-                    <div style={{ textAlign: 'left' }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Attendance Records Sample</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Roll No, Name, Institute, Attendance %</div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Student Roster & Attendance Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Name, Roll No, Institute, Specialization, Attendance %</div>
                     </div>
                   </button>
 
@@ -1064,7 +1018,7 @@ export default function Admin() {
                   <button
                     onClick={() => {
                       setEditingStudent(null);
-                      setStudentForm({ name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1' });
+                      setStudentForm({ name: '', rollNumber: '', institute: 'BIMM', specialization: 'Data Science and Business Analytics', semester: 'Semester 1', attendance: 85 });
                       setShowAddStudentModal(true);
                     }}
                     className="btn btn-primary"
@@ -1093,6 +1047,7 @@ export default function Admin() {
                         <th>Institute</th>
                         <th>Specialization</th>
                         <th>Semester</th>
+                        <th>Attendance %</th>
                         <th>Status</th>
                         <th style={{ textAlign: 'right' }}>Actions</th>
                       </tr>
@@ -1100,13 +1055,16 @@ export default function Admin() {
                     <tbody>
                       {filteredStudents.length === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                             No student records matching your search or filters.
                           </td>
                         </tr>
                       ) : (
                         filteredStudents.map(s => {
                           const isReg = registeredRolls.has(String(s.rollNumber));
+                          const attRecord = attendanceList.find(a => String(a.rollNumber).trim() === String(s.rollNumber).trim());
+                          const attPct = attRecord?.attendance ?? s.attendance ?? 85;
+                          const isGood = attPct >= 75;
                           return (
                             <tr key={s.rollNumber}>
                               <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.rollNumber}</td>
@@ -1114,6 +1072,14 @@ export default function Admin() {
                               <td><span className="badge badge-primary">{s.institute}</span></td>
                               <td style={{ fontSize: 13, color: 'var(--slate)' }}>{s.specialization}</td>
                               <td style={{ fontSize: 13 }}>{s.semester || 'Semester 1'}</td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <strong style={{ fontSize: 13, color: isGood ? '#059669' : '#DC2626' }}>{attPct}%</strong>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isGood ? '#ECFDF5' : '#FEF2F2', color: isGood ? '#059669' : '#DC2626' }}>
+                                    {isGood ? 'Eligible' : 'Shortage'}
+                                  </span>
+                                </div>
+                              </td>
                               <td>
                                 <span className={`badge ${isReg ? 'badge-success' : 'badge-warning'}`}>
                                   {isReg ? 'Registered' : 'Pending'}
@@ -1129,11 +1095,12 @@ export default function Admin() {
                                         rollNumber: s.rollNumber || '',
                                         institute: s.institute || 'BIMM',
                                         specialization: s.specialization || '',
-                                        semester: s.semester || 'Semester 1'
+                                        semester: s.semester || 'Semester 1',
+                                        attendance: attPct
                                       });
                                       setShowAddStudentModal(true);
                                     }}
-                                    title="Edit Student"
+                                    title="Edit Student & Attendance"
                                     style={{ padding: '6px', borderRadius: 6, border: '1px solid var(--border)', background: '#F8FAFC', cursor: 'pointer' }}
                                   >
                                     <Edit2 size={14} color="var(--navy)" />
@@ -1146,153 +1113,6 @@ export default function Admin() {
                                     <Trash2 size={14} color="#EF4444" />
                                   </button>
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ══════════════ TAB: ATTENDANCE ══════════════ */}
-          {activeTab === 'attendance' && (
-            <div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, flex: 1, minWidth: 260 }}>
-                  <div className="input-wrapper" style={{ flex: 1, minWidth: 200 }}>
-                    <Search size={16} className="input-icon" />
-                    <input
-                      className="form-input"
-                      style={{ height: 42, paddingLeft: 38 }}
-                      placeholder="Search by student name or roll number…"
-                      value={attSearch}
-                      onChange={e => setAttSearch(e.target.value)}
-                    />
-                  </div>
-
-                  <select
-                    className="form-input"
-                    style={{ width: 'auto', height: 42, paddingLeft: 12 }}
-                    value={attInstFilter}
-                    onChange={e => setAttInstFilter(e.target.value)}
-                  >
-                    <option value="all">All Institutes</option>
-                    {INSTITUTES.map(inst => (
-                      <option key={inst.id} value={inst.id}>{inst.id}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => downloadSampleExcel('attendance')}
-                    className="btn btn-ghost"
-                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
-                    title="Download Attendance Sample Excel Sheet (.xlsx)"
-                  >
-                    <Download size={16} />
-                    <span>Sample Excel</span>
-                  </button>
-
-                  <label
-                    className="btn btn-ghost"
-                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: '1px dashed var(--border)' }}
-                    title="Upload attendance percentage via Excel"
-                  >
-                    <Upload size={16} />
-                    <span>Upload Attendance Excel</span>
-                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleAttendanceExcelImport} style={{ display: 'none' }} />
-                  </label>
-
-                  <button
-                    onClick={() => {
-                      setAttForm({ rollNumber: '', studentName: '', institute: 'BIMM', specialization: '', attendance: 85 });
-                      setShowAddAttendanceModal(true);
-                    }}
-                    className="btn btn-primary"
-                    style={{ height: 42, padding: '0 18px' }}
-                  >
-                    <Plus size={16} />
-                    <span>Set Attendance</span>
-                  </button>
-                </div>
-              </div>
-
-              {attUploadReport && (
-                <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: '#065F46' }}>
-                  <span>Attendance spreadsheet processed at {attUploadReport.time}: {attUploadReport.successCount} student records updated successfully.</span>
-                  <button onClick={() => setAttUploadReport(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065F46' }}><X size={16} /></button>
-                </div>
-              )}
-
-              <div style={{ background: '#fff', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                <div className="table-responsive">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Roll Number</th>
-                        <th>Student Name</th>
-                        <th>Institute</th>
-                        <th>Specialization</th>
-                        <th>Attendance %</th>
-                        <th>Eligibility Status</th>
-                        <th>Last Updated</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredAttendance.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
-                            No attendance records available. Import Excel or set individual attendance.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredAttendance.map(a => {
-                          const pct = a.attendance ?? 85;
-                          const isEligible = pct >= 75;
-                          return (
-                            <tr key={a.rollNumber}>
-                              <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{a.rollNumber}</td>
-                              <td style={{ fontWeight: 600 }}>{a.studentName || '—'}</td>
-                              <td><span className="badge badge-primary">{a.institute || 'BIMM'}</span></td>
-                              <td style={{ fontSize: 13, color: 'var(--slate)' }}>{a.specialization || '—'}</td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <strong style={{ fontSize: 14, color: isEligible ? '#059669' : '#DC2626' }}>{pct}%</strong>
-                                  <div style={{ width: 60, height: 6, borderRadius: 99, background: '#E2E8F0', overflow: 'hidden' }}>
-                                    <div style={{ width: `${pct}%`, height: '100%', background: isEligible ? '#10B981' : '#EF4444' }} />
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                <span className={`badge ${isEligible ? 'badge-success' : 'badge-danger'}`}>
-                                  {isEligible ? 'Eligible (≥75%)' : 'Shortage (<75%)'}
-                                </span>
-                              </td>
-                              <td style={{ fontSize: 12, color: 'var(--muted)' }}>{a.lastUpdated || 'Recent'}</td>
-                              <td style={{ textAlign: 'right' }}>
-                                <button
-                                  onClick={() => {
-                                    setAttForm({
-                                      rollNumber: a.rollNumber,
-                                      studentName: a.studentName || '',
-                                      institute: a.institute || 'BIMM',
-                                      specialization: a.specialization || '',
-                                      attendance: a.attendance ?? 85
-                                    });
-                                    setShowAddAttendanceModal(true);
-                                  }}
-                                  title="Edit Attendance"
-                                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#F8FAFC', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                                >
-                                  Update
-                                </button>
                               </td>
                             </tr>
                           );
@@ -1864,73 +1684,26 @@ export default function Admin() {
               </select>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-              <button type="button" onClick={() => setShowAddStudentModal(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Record</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ── MODAL: SET ATTENDANCE ─────────────────────────────── */}
-      {showAddAttendanceModal && (
-        <div className="modal-backdrop">
-          <form className="modal-card" onSubmit={handleSaveSingleAttendance}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)' }}>Update Student Attendance</h3>
-              <button type="button" onClick={() => setShowAddAttendanceModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
-            </div>
-
             <div className="form-group">
-              <label className="form-label">Roll Number</label>
+              <label className="form-label">Attendance Percentage (%)</label>
               <input
-                className="form-input"
-                style={{ paddingLeft: 14 }}
-                value={attForm.rollNumber}
-                onChange={e => {
-                  const rn = e.target.value;
-                  const found = students.find(s => String(s.rollNumber).trim() === rn.trim());
-                  setAttForm({
-                    ...attForm,
-                    rollNumber: rn,
-                    studentName: found ? found.name : attForm.studentName,
-                    institute: found ? found.institute : attForm.institute,
-                    specialization: found ? found.specialization : attForm.specialization
-                  });
-                }}
-                placeholder="Student roll number"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Student Name</label>
-              <input
-                className="form-input"
-                style={{ paddingLeft: 14 }}
-                value={attForm.studentName}
-                onChange={e => setAttForm({ ...attForm, studentName: e.target.value })}
-                placeholder="Student Name"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Attendance Percentage (0-100%)</label>
-              <input
-                className="form-input"
-                style={{ paddingLeft: 14 }}
                 type="number"
                 min="0"
                 max="100"
-                value={attForm.attendance}
-                onChange={e => setAttForm({ ...attForm, attendance: e.target.value })}
-                required
+                className="form-input"
+                style={{ paddingLeft: 14 }}
+                value={studentForm.attendance ?? 85}
+                onChange={e => setStudentForm({ ...studentForm, attendance: e.target.value })}
+                placeholder="e.g. 85"
               />
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                University minimum criteria is 75%. Live updates reflect directly in student portal.
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-              <button type="button" onClick={() => setShowAddAttendanceModal(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Attendance</button>
+              <button type="button" onClick={() => setShowAddStudentModal(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Record</button>
             </div>
           </form>
         </div>

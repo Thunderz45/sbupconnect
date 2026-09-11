@@ -148,11 +148,11 @@ export const SEMESTERS = [
 
 // ── Default / Sample Data ──────────────────────────────────────
 export const SAMPLE_STUDENTS = [
-  { name: 'Bhushan Padghan',  rollNumber: '20230948271', institute: 'BIMM',   specialization: 'Data Science and Business Analytics', semester: 'Semester 1' },
-  { name: 'Aarav Sharma',     rollNumber: '20230948272', institute: 'BITM',   specialization: 'Telecom Management',                  semester: 'Semester 1' },
-  { name: 'Priya Patel',      rollNumber: '20230948273', institute: 'BIIB',   specialization: 'International Business',              semester: 'Semester 2' },
-  { name: 'Rohit Joshi',      rollNumber: '20230948274', institute: 'BIMHRD', specialization: 'Human Resources',                     semester: 'Semester 1' },
-  { name: 'Sneha Deshmukh',   rollNumber: '20230948275', institute: 'SBSCS',  specialization: 'Computer Science and AI Systems',     semester: 'Semester 3' },
+  { name: 'Bhushan Padghan',  rollNumber: '20230948271', institute: 'BIMM',   specialization: 'Data Science and Business Analytics', semester: 'Semester 1', attendance: 88 },
+  { name: 'Aarav Sharma',     rollNumber: '20230948272', institute: 'BITM',   specialization: 'Telecom Management',                  semester: 'Semester 1', attendance: 78 },
+  { name: 'Priya Patel',      rollNumber: '20230948273', institute: 'BIIB',   specialization: 'International Business',              semester: 'Semester 2', attendance: 92 },
+  { name: 'Rohit Joshi',      rollNumber: '20230948274', institute: 'BIMHRD', specialization: 'Human Resources',                     semester: 'Semester 1', attendance: 71 },
+  { name: 'Sneha Deshmukh',   rollNumber: '20230948275', institute: 'SBSCS',  specialization: 'Computer Science and AI Systems',     semester: 'Semester 3', attendance: 95 },
 ];
 
 export const SAMPLE_ATTENDANCE = {
@@ -1362,11 +1362,11 @@ export function downloadSampleExcel(type) {
 
   if (type === 'students') {
     const data = [
-      { 'Student Name': 'Bhushan Padghan', 'Roll Number': '20230948271', 'Institute': 'BIMM', 'Specialization': 'Data Science and Business Analytics', 'Semester': 'Semester 1' },
-      { 'Student Name': 'Aarav Sharma',     'Roll Number': '20230948272', 'Institute': 'BITM', 'Specialization': 'Telecom Management',                  'Semester': 'Semester 1' },
-      { 'Student Name': 'Priya Patel',      'Roll Number': '20230948273', 'Institute': 'BIIB', 'Specialization': 'International Business',              'Semester': 'Semester 2' },
-      { 'Student Name': 'Rohit Joshi',      'Roll Number': '20230948274', 'Institute': 'BIMHRD', 'Specialization': 'Human Resources',                  'Semester': 'Semester 1' },
-      { 'Student Name': 'Sneha Deshmukh',   'Roll Number': '20230948275', 'Institute': 'SBSCS', 'Specialization': 'Computer Science and AI Systems',  'Semester': 'Semester 3' }
+      { 'Student Name': 'Bhushan Padghan', 'Roll Number': '20230948271', 'Institute': 'BIMM', 'Specialization': 'Data Science and Business Analytics', 'Semester': 'Semester 1', 'Attendance %': '88%' },
+      { 'Student Name': 'Aarav Sharma',     'Roll Number': '20230948272', 'Institute': 'BITM', 'Specialization': 'Telecom Management',                  'Semester': 'Semester 1', 'Attendance %': '78%' },
+      { 'Student Name': 'Priya Patel',      'Roll Number': '20230948273', 'Institute': 'BIIB', 'Specialization': 'International Business',              'Semester': 'Semester 2', 'Attendance %': '92%' },
+      { 'Student Name': 'Rohit Joshi',      'Roll Number': '20230948274', 'Institute': 'BIMHRD', 'Specialization': 'Human Resources',                  'Semester': 'Semester 1', 'Attendance %': '71%' },
+      { 'Student Name': 'Sneha Deshmukh',   'Roll Number': '20230948275', 'Institute': 'SBSCS', 'Specialization': 'Computer Science and AI Systems',  'Semester': 'Semester 3', 'Attendance %': '95%' }
     ];
     ws = XLSX.utils.json_to_sheet(data);
     filename = 'SBUP_Student_Roster_Sample.xlsx';
