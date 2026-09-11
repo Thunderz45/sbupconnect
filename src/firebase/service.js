@@ -662,17 +662,19 @@ export async function addStudent(student) {
   const rollNumber = String(student.rollNumber || '').trim();
   if (!rollNumber) return { success: false, error: 'Roll number is required.' };
 
+  const attVal = parseAttendanceValue(student.attendance, 85);
   const record = {
     rollNumber,
     name: (student.name || '').trim(),
     institute: (student.institute || '').trim(),
     specialization: (student.specialization || '').trim(),
     semester: (student.semester || 'Semester 1').trim(),
+    attendance: attVal,
     uploadedAt: new Date().toISOString()
   };
 
   try {
-    await setDoc(doc(db, 'student_list', rollNumber), record);
+    await setDoc(doc(db, 'student_list', rollNumber), record, { merge: true });
   } catch (e) {
     console.warn('Firestore addStudent write warning:', e.message);
   }
@@ -740,12 +742,14 @@ export async function batchUploadStudentList(studentsArray, onProgress) {
         const rollNumber = String(student.rollNumber || '').trim();
         if (!rollNumber) return;
         const ref = doc(db, 'student_list', rollNumber);
+        const attVal = parseAttendanceValue(student.attendance, 85);
         batch.set(ref, {
           name: (student.name || '').trim(),
           rollNumber: rollNumber,
           institute: (student.institute || '').trim(),
           specialization: (student.specialization || '').trim(),
           semester: (student.semester || 'Semester 1').trim(),
+          attendance: attVal,
           uploadedAt: serverTimestamp()
         }, { merge: true });
       });
@@ -767,6 +771,7 @@ export async function batchUploadStudentList(studentsArray, onProgress) {
         map.set(rn, {
           ...s,
           rollNumber: rn,
+          attendance: parseAttendanceValue(s.attendance, 85),
           semester: s.semester || 'Semester 1'
         });
       }
@@ -779,6 +784,35 @@ export async function batchUploadStudentList(studentsArray, onProgress) {
 
   notifyDataChanged('students');
   return { success: true, importedCount: count };
+}
+
+// ── Helper: Parse Attendance Values from Excel / Forms ────────
+export function parseAttendanceValue(raw, fallback = 85) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  if (typeof raw === 'number') {
+    if (isNaN(raw)) return fallback;
+    // Excel percentage format stores 75% as 0.75
+    if (raw > 0 && raw <= 1) return Math.round(raw * 100);
+    return Math.min(100, Math.max(0, Math.round(raw)));
+  }
+  const str = String(raw).trim();
+  if (!str) return fallback;
+  // Handle fraction format like "28/30" or "45 / 50"
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    const n = parseFloat(parts[0]);
+    const d = parseFloat(parts[1]);
+    if (!isNaN(n) && !isNaN(d) && d > 0) {
+      return Math.min(100, Math.max(0, Math.round((n / d) * 100)));
+    }
+  }
+  const clean = str.replace('%', '').trim();
+  const num = parseFloat(clean);
+  if (isNaN(num)) return fallback;
+  if (num > 0 && num <= 1 && !str.includes('%')) {
+    return Math.round(num * 100);
+  }
+  return Math.min(100, Math.max(0, Math.round(num)));
 }
 
 // ── 3. Attendance Management ───────────────────────────────────
@@ -794,31 +828,55 @@ export async function getStudentAttendance(rollNumber) {
   }
 
   const attMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE);
-  return attMap[clean] || { rollNumber: clean, attendance: 85, lastUpdated: 'Recent' };
+  if (attMap && attMap[clean]) return attMap[clean];
+
+  // Fallback to local student list if attendance was recorded there
+  const localStudents = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS);
+  const s = localStudents.find(st => String(st.rollNumber).trim() === clean);
+  if (s && s.attendance !== undefined && s.attendance !== null) {
+    return {
+      rollNumber: clean,
+      studentName: s.name || '',
+      institute: s.institute || '',
+      specialization: s.specialization || '',
+      attendance: Number(s.attendance),
+      lastUpdated: 'Recent'
+    };
+  }
+
+  return { rollNumber: clean, attendance: 85, lastUpdated: 'Recent' };
 }
 
 export async function getAllAttendance() {
+  const localMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE) || {};
   try {
     const snap = await getDocs(collection(db, 'attendance'));
     if (!snap.empty) {
-      const list = snap.docs.map(d => ({ rollNumber: d.id, ...d.data() }));
-      return list;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const rn = d.id;
+        // Merge so newer local uploads aren't wiped out by stale Firestore reads
+        if (!localMap[rn]) {
+          localMap[rn] = { rollNumber: rn, ...data };
+        } else {
+          localMap[rn] = { ...data, ...localMap[rn], rollNumber: rn };
+        }
+      });
     }
   } catch (e) {
     console.warn('Firestore getAllAttendance warning:', e.message);
   }
-  const attMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE);
-  return Object.values(attMap);
+  return Object.values(localMap);
 }
 
 export async function setSingleStudentAttendance(rollNumber, attendancePct, studentName = '', institute = '', specialization = '') {
   const cleanRn = String(rollNumber).trim();
-  const numPct = Math.min(100, Math.max(0, parseFloat(attendancePct) || 0));
+  const numPct = parseAttendanceValue(attendancePct, 85);
   const record = {
     rollNumber: cleanRn,
-    studentName: studentName.trim(),
-    institute: institute.trim(),
-    specialization: specialization.trim(),
+    studentName: (studentName || '').trim(),
+    institute: (institute || '').trim(),
+    specialization: (specialization || '').trim(),
     attendance: numPct,
     lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   };
@@ -827,13 +885,27 @@ export async function setSingleStudentAttendance(rollNumber, attendancePct, stud
   attMap[cleanRn] = { ...(attMap[cleanRn] || {}), ...record };
   saveLocalItem(LOCAL_ATTENDANCE_KEY, attMap);
 
+  // Sync to local student list
+  try {
+    const localStudents = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS);
+    const sIdx = localStudents.findIndex(s => String(s.rollNumber).trim() === cleanRn);
+    if (sIdx >= 0) {
+      localStudents[sIdx] = { ...localStudents[sIdx], attendance: numPct };
+      saveLocalItem(LOCAL_STUDENT_LIST_KEY, localStudents);
+    }
+  } catch (err) {
+    console.warn('Sync to local student list failed:', err);
+  }
+
   try {
     await setDoc(doc(db, 'attendance', cleanRn), record, { merge: true });
+    await setDoc(doc(db, 'student_list', cleanRn), { attendance: numPct }, { merge: true });
   } catch (e) {
     console.warn('Firestore setSingleStudentAttendance write warning:', e.message);
   }
 
   notifyDataChanged('attendance');
+  notifyDataChanged('students');
   return { success: true, record };
 }
 
@@ -841,6 +913,7 @@ export async function batchUploadAttendance(recordsArray) {
   const attMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE);
   let successCount = 0;
   let failedCount = 0;
+  const toWrite = [];
 
   recordsArray.forEach(rec => {
     const rn = String(rec.rollNumber || '').trim();
@@ -848,35 +921,57 @@ export async function batchUploadAttendance(recordsArray) {
       failedCount++;
       return;
     }
-    const cleanPct = String(rec.attendance || '').replace('%', '').trim();
-    const numPct = parseFloat(cleanPct);
-    const pct = isNaN(numPct) ? 0 : Math.min(100, Math.max(0, numPct));
+    const pct = parseAttendanceValue(rec.attendance, 85);
 
-    attMap[rn] = {
+    const record = {
       rollNumber: rn,
-      studentName: rec.studentName || '',
+      studentName: rec.studentName || rec.name || '',
       institute: rec.institute || '',
       specialization: rec.specialization || '',
       attendance: pct,
       lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     };
+    attMap[rn] = record;
+    toWrite.push(record);
     successCount++;
   });
 
   saveLocalItem(LOCAL_ATTENDANCE_KEY, attMap);
 
+  // Update local student list with the new attendance values
   try {
-    const batch = writeBatch(db);
-    Object.keys(attMap).forEach(rn => {
-      const ref = doc(db, 'attendance', rn);
-      batch.set(ref, attMap[rn], { merge: true });
+    const localStudents = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS);
+    const studMap = new Map(localStudents.map(s => [String(s.rollNumber).trim(), s]));
+    toWrite.forEach(item => {
+      if (studMap.has(item.rollNumber)) {
+        studMap.set(item.rollNumber, { ...studMap.get(item.rollNumber), attendance: item.attendance });
+      }
     });
-    await batch.commit();
+    saveLocalItem(LOCAL_STUDENT_LIST_KEY, Array.from(studMap.values()));
+  } catch (err) {
+    console.warn('Syncing attendance to local student list failed:', err);
+  }
+
+  // Write only the new records to Firestore in chunks of 400
+  try {
+    const chunkSize = 400;
+    for (let i = 0; i < toWrite.length; i += chunkSize) {
+      const chunk = toWrite.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach(item => {
+        const ref = doc(db, 'attendance', item.rollNumber);
+        batch.set(ref, item, { merge: true });
+        const studRef = doc(db, 'student_list', item.rollNumber);
+        batch.set(studRef, { attendance: item.attendance }, { merge: true });
+      });
+      await batch.commit();
+    }
   } catch (e) {
     console.warn('Firestore batchUploadAttendance warning:', e.message);
   }
 
   notifyDataChanged('attendance');
+  notifyDataChanged('students');
   return { success: true, successCount, failedCount };
 }
 

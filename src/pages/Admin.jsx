@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
 import {
   fetchStudentList, fetchRegisteredStudents, addStudent, updateStudent, deleteStudentFromList,
-  batchUploadStudentList, getAllAttendance, batchUploadAttendance, setSingleStudentAttendance,
+  batchUploadStudentList, getAllAttendance, batchUploadAttendance, setSingleStudentAttendance, parseAttendanceValue,
   getAllNotes, createNote, deleteNote,
   getAllTimetables, saveTimetable, deleteTimetable, batchUploadTimetable,
   getAllNotices, createNotice, updateNotice, deleteNotice,
@@ -159,28 +159,16 @@ export default function Admin() {
     }
 
     const cleanRoll = String(studentForm.rollNumber).trim();
-    const attVal = Math.min(100, Math.max(0, parseInt(studentForm.attendance) || 85));
+    const attVal = parseAttendanceValue(studentForm.attendance, 85);
 
     if (editingStudent) {
       await updateStudent(editingStudent.rollNumber, { ...studentForm, attendance: attVal });
-      await setSingleStudentAttendance(editingStudent.rollNumber, {
-        studentName: studentForm.name,
-        rollNumber: editingStudent.rollNumber,
-        institute: studentForm.institute,
-        specialization: studentForm.specialization,
-        attendance: attVal
-      });
+      await setSingleStudentAttendance(editingStudent.rollNumber, attVal, studentForm.name, studentForm.institute, studentForm.specialization);
       showToast('Student details & attendance updated successfully');
     } else {
       const res = await addStudent({ ...studentForm, rollNumber: cleanRoll, attendance: attVal });
       if (res.success) {
-        await setSingleStudentAttendance(cleanRoll, {
-          studentName: studentForm.name,
-          rollNumber: cleanRoll,
-          institute: studentForm.institute,
-          specialization: studentForm.specialization,
-          attendance: attVal
-        });
+        await setSingleStudentAttendance(cleanRoll, attVal, studentForm.name, studentForm.institute, studentForm.specialization);
         showToast('Student and attendance record added to roster');
       } else {
         showToast(res.error, 'error');
@@ -213,17 +201,60 @@ export default function Admin() {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      // Robust fuzzy column matcher for Excel headers
+      const resolveColumn = (row, candidates) => {
+        const keys = Object.keys(row);
+        // Exact normalized match (ignoring whitespace, casing, %, _, -, parens)
+        for (const cand of candidates) {
+          const normCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (const k of keys) {
+            const normK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normK === normCand) {
+              const val = row[k];
+              if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+            }
+          }
+        }
+        // Substring match
+        for (const cand of candidates) {
+          const normCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (const k of keys) {
+            const normK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normK.includes(normCand) || normCand.includes(normK)) {
+              const val = row[k];
+              if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+            }
+          }
+        }
+        return null;
+      };
 
       const mapped = rows.map(r => {
-        const rawAtt = (r['Attendance %'] || r['Attendance'] || r['Percentage'] || r['attendance'] || '85').toString().replace('%', '').trim();
-        const attVal = Math.min(100, Math.max(0, parseInt(rawAtt) || 85));
+        const rawName = resolveColumn(r, ['Student Name', 'Name', 'FullName', 'Student', 'Candidate Name']) || '';
+        const rawRoll = resolveColumn(r, ['Roll Number', 'Roll No', 'Roll', 'PRN', 'PRN No', 'Registration No', 'StudentID', 'ID']) || '';
+        const rawInst = resolveColumn(r, ['Institute', 'Institute Code', 'College', 'School', 'Dept']) || 'BIMM';
+        const rawSpec = resolveColumn(r, ['Specialization', 'Branch', 'Course', 'Stream', 'Program']) || 'Data Science and Business Analytics';
+        const rawSem  = resolveColumn(r, ['Semester', 'Sem', 'Term', 'Year']) || 'Semester 1';
+
+        // Match any attendance variant including user misspellings (attendence, atendce, etc.)
+        const rawAtt  = resolveColumn(r, [
+          'Attendance %', 'Attendence %', 'Attendance%', 'Attendence%',
+          'Attendance (%)', 'Attendence (%)', 'Attendance Percent', 'Attendence Percent',
+          'Attendance Percentage', 'Attendence Percentage',
+          'Attendance', 'Attendence', 'Atendce', 'Atednce',
+          'Att %', 'Att%', 'Att', 'Percentage', 'Percent', 'Present %', 'Present'
+        ]);
+
+        const attVal = parseAttendanceValue(rawAtt, 85);
+
         return {
-          name: (r['Student Name'] || r['Name'] || r['name'] || '').toString().trim(),
-          rollNumber: (r['Roll Number'] || r['Roll No'] || r['rollno'] || r['PRN'] || '').toString().trim(),
-          institute: (r['Institute'] || r['Institute Code'] || 'BIMM').toString().trim(),
-          specialization: (r['Specialization'] || r['Branch'] || 'Data Science and Business Analytics').toString().trim(),
-          semester: (r['Semester'] || r['Term'] || 'Semester 1').toString().trim(),
+          name: String(rawName).trim(),
+          rollNumber: String(rawRoll).trim(),
+          institute: String(rawInst).trim(),
+          specialization: String(rawSpec).trim(),
+          semester: String(rawSem).trim(),
           attendance: attVal
         };
       }).filter(r => r.rollNumber && r.name);
@@ -251,7 +282,7 @@ export default function Admin() {
         time: new Date().toLocaleTimeString()
       });
 
-      showToast(`Imported ${res.importedCount} students with attendance percentages successfully!`);
+      showToast(`Imported ${res.importedCount} students with accurate attendance percentages!`);
       await loadAllData();
     } catch (err) {
       showToast('Import error: ' + err.message, 'error');
@@ -1063,7 +1094,9 @@ export default function Admin() {
                         filteredStudents.map(s => {
                           const isReg = registeredRolls.has(String(s.rollNumber));
                           const attRecord = attendanceList.find(a => String(a.rollNumber).trim() === String(s.rollNumber).trim());
-                          const attPct = attRecord?.attendance ?? s.attendance ?? 85;
+                          const attPct = s.attendance !== undefined && s.attendance !== null
+                            ? s.attendance
+                            : (attRecord?.attendance !== undefined && attRecord?.attendance !== null ? attRecord.attendance : 85);
                           const isGood = attPct >= 75;
                           return (
                             <tr key={s.rollNumber}>
