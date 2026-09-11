@@ -632,17 +632,36 @@ export function clearSession() {
 // ── 2. Admin: Student Management ───────────────────────────────
 
 export async function fetchStudentList() {
+  const localList = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS) || [];
+  const localMap = new Map(localList.map(s => [String(s.rollNumber).trim(), s]));
+
   try {
     const snap = await getDocs(query(collection(db, 'student_list'), limit(1000)));
     if (!snap.empty) {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      saveLocalItem(LOCAL_STUDENT_LIST_KEY, list);
-      return list;
+      snap.docs.forEach(d => {
+        const fsData = d.data();
+        const rn = String(d.id || fsData.rollNumber).trim();
+        const existing = localMap.get(rn) || {};
+        const att = existing.attendance !== undefined && existing.attendance !== null
+          ? existing.attendance
+          : (fsData.attendance !== undefined && fsData.attendance !== null ? fsData.attendance : 85);
+
+        localMap.set(rn, {
+          ...fsData,
+          id: rn,
+          rollNumber: rn,
+          ...existing,
+          attendance: att
+        });
+      });
+      const merged = Array.from(localMap.values());
+      saveLocalItem(LOCAL_STUDENT_LIST_KEY, merged);
+      return merged;
     }
   } catch (e) {
     console.warn('Firestore fetchStudentList warning, using local store:', e.message);
   }
-  return getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS).map(s => ({ id: s.rollNumber, ...s }));
+  return Array.from(localMap.values()).map(s => ({ id: s.rollNumber, ...s }));
 }
 
 export async function fetchRegisteredStudents() {
@@ -806,7 +825,8 @@ export function parseAttendanceValue(raw, fallback = 85) {
       return Math.min(100, Math.max(0, Math.round((n / d) * 100)));
     }
   }
-  const clean = str.replace('%', '').trim();
+  if (/^present$/i.test(clean) || /^p$/i.test(clean)) return 100;
+  if (/^absent$/i.test(clean) || /^a$/i.test(clean)) return 0;
   const num = parseFloat(clean);
   if (isNaN(num)) return fallback;
   if (num > 0 && num <= 1 && !str.includes('%')) {
@@ -854,12 +874,14 @@ export async function getAllAttendance() {
     if (!snap.empty) {
       snap.docs.forEach(d => {
         const data = d.data();
-        const rn = d.id;
-        // Merge so newer local uploads aren't wiped out by stale Firestore reads
+        const rn = String(d.id).trim();
         if (!localMap[rn]) {
           localMap[rn] = { rollNumber: rn, ...data };
         } else {
-          localMap[rn] = { ...data, ...localMap[rn], rollNumber: rn };
+          const att = localMap[rn].attendance !== undefined && localMap[rn].attendance !== null
+            ? localMap[rn].attendance
+            : data.attendance;
+          localMap[rn] = { ...data, ...localMap[rn], rollNumber: rn, attendance: att };
         }
       });
     }

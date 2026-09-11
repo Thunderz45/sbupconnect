@@ -206,7 +206,7 @@ export default function Admin() {
       // Robust fuzzy column matcher for Excel headers
       const resolveColumn = (row, candidates) => {
         const keys = Object.keys(row);
-        // Exact normalized match (ignoring whitespace, casing, %, _, -, parens)
+        // Pass 1: exact normalized match (ignoring whitespace, casing, %, _, -, parens)
         for (const cand of candidates) {
           const normCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
           for (const k of keys) {
@@ -217,12 +217,13 @@ export default function Admin() {
             }
           }
         }
-        // Substring match
+        // Pass 2: substring match (candidate must be contained in column name, min 3 chars)
         for (const cand of candidates) {
           const normCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (normCand.length < 3) continue;
           for (const k of keys) {
             const normK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (normK.includes(normCand) || normCand.includes(normK)) {
+            if (normK.includes(normCand)) {
               const val = row[k];
               if (val !== undefined && val !== null && String(val).trim() !== '') return val;
             }
@@ -234,16 +235,17 @@ export default function Admin() {
       const mapped = rows.map(r => {
         const rawName = resolveColumn(r, ['Student Name', 'Name', 'FullName', 'Student', 'Candidate Name']) || '';
         const rawRoll = resolveColumn(r, ['Roll Number', 'Roll No', 'Roll', 'PRN', 'PRN No', 'Registration No', 'StudentID', 'ID']) || '';
+        const cleanRoll = String(rawRoll).replace(/\.0$/, '').trim();
         const rawInst = resolveColumn(r, ['Institute', 'Institute Code', 'College', 'School', 'Dept']) || 'BIMM';
         const rawSpec = resolveColumn(r, ['Specialization', 'Branch', 'Course', 'Stream', 'Program']) || 'Data Science and Business Analytics';
         const rawSem  = resolveColumn(r, ['Semester', 'Sem', 'Term', 'Year']) || 'Semester 1';
 
-        // Match any attendance variant including user misspellings (attendence, atendce, etc.)
+        // Match any attendance variant including user misspellings (attendence, atendce, attendnce, etc.)
         const rawAtt  = resolveColumn(r, [
           'Attendance %', 'Attendence %', 'Attendance%', 'Attendence%',
           'Attendance (%)', 'Attendence (%)', 'Attendance Percent', 'Attendence Percent',
           'Attendance Percentage', 'Attendence Percentage',
-          'Attendance', 'Attendence', 'Atendce', 'Atednce',
+          'Attendance', 'Attendence', 'Atendce', 'Atednce', 'Attendnce', 'Atendance',
           'Att %', 'Att%', 'Att', 'Percentage', 'Percent', 'Present %', 'Present'
         ]);
 
@@ -251,7 +253,7 @@ export default function Admin() {
 
         return {
           name: String(rawName).trim(),
-          rollNumber: String(rawRoll).trim(),
+          rollNumber: cleanRoll,
           institute: String(rawInst).trim(),
           specialization: String(rawSpec).trim(),
           semester: String(rawSem).trim(),
@@ -265,8 +267,33 @@ export default function Admin() {
         return;
       }
 
+      // Instantly update UI states so changes reflect on screen immediately without lag
+      setStudents(prevStudents => {
+        const map = new Map(prevStudents.map(s => [String(s.rollNumber).trim(), s]));
+        mapped.forEach(s => {
+          const existing = map.get(s.rollNumber) || {};
+          map.set(s.rollNumber, { ...existing, ...s });
+        });
+        return Array.from(map.values());
+      });
+
+      setAttendanceList(prevAtt => {
+        const map = new Map(prevAtt.map(a => [String(a.rollNumber).trim(), a]));
+        mapped.forEach(s => {
+          map.set(s.rollNumber, {
+            rollNumber: s.rollNumber,
+            studentName: s.name,
+            institute: s.institute,
+            specialization: s.specialization,
+            attendance: s.attendance,
+            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          });
+        });
+        return Array.from(map.values());
+      });
+
+      // Persist to local storage and remote Firestore in background
       const res = await batchUploadStudentList(mapped);
-      // Batch sync attendance directly with student import
       const attRows = mapped.map(s => ({
         rollNumber: s.rollNumber,
         studentName: s.name,
@@ -282,8 +309,7 @@ export default function Admin() {
         time: new Date().toLocaleTimeString()
       });
 
-      showToast(`Imported ${res.importedCount} students with accurate attendance percentages!`);
-      await loadAllData();
+      showToast(`Updated ${res.importedCount} student attendance records successfully!`);
     } catch (err) {
       showToast('Import error: ' + err.message, 'error');
     }
