@@ -942,7 +942,7 @@ export default function StudentDashboard() {
                 </div>
 
                 {/* Day Selector Pills */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%', paddingBottom: 4 }}>
                   {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map(day => (
                     <button
                       key={day}
@@ -956,6 +956,7 @@ export default function StudentDashboard() {
                         fontSize: 13,
                         fontWeight: 700,
                         cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                         transition: 'all 0.15s'
                       }}
                     >
@@ -1779,6 +1780,50 @@ export default function StudentDashboard() {
 
         </main>
       </div>
+
+      {/* ── MOBILE BOTTOM NAVIGATION BAR ── */}
+      <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <button
+          type="button"
+          onClick={() => handleTabSelect('overview')}
+          className={`mobile-nav-item${activeTab === 'overview' ? ' active' : ''}`}
+        >
+          <LayoutDashboard size={20} />
+          <span>Home</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabSelect('timetable')}
+          className={`mobile-nav-item${activeTab === 'timetable' ? ' active' : ''}`}
+        >
+          <Clock size={20} />
+          <span>Schedule</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabSelect('notes')}
+          className={`mobile-nav-item${activeTab === 'notes' ? ' active' : ''}`}
+        >
+          <BookOpen size={20} />
+          <span>Notes</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabSelect('attendance')}
+          className={`mobile-nav-item${activeTab === 'attendance' ? ' active' : ''}`}
+        >
+          <CheckCircle2 size={20} />
+          <span>Attendance</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className={`mobile-nav-item${['notices', 'news', 'faculty', 'profile'].includes(activeTab) ? ' active' : ''}`}
+        >
+          <Menu size={20} />
+          <span>More</span>
+        </button>
+      </nav>
 
     </div>
   );

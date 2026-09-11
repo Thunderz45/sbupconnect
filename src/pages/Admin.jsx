@@ -11,6 +11,7 @@ import {
   getDailyNews, createDailyNews, deleteDailyNews,
   getAllNotifications, createNotification, toggleNotificationStatus, deleteNotification,
   getAllFaculty, createFaculty, deleteFaculty,
+  downloadSampleExcel, resetToFreshState, loadSampleDataset,
   INSTITUTES, SPECIALIZATIONS_BY_INSTITUTE, SEMESTERS, notifyDataChanged
 } from '../firebase/service';
 import {
@@ -102,6 +103,11 @@ export default function Admin() {
   // Report states for file uploads
   const [attUploadReport, setAttUploadReport] = useState(null);
   const [studentUploadReport, setStudentUploadReport] = useState(null);
+
+  // System Reset & Fresh Website Modal
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetIncludeRoster, setResetIncludeRoster] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -357,6 +363,69 @@ export default function Admin() {
     });
     showToast('Lecture slot removed');
     await loadAllData();
+  };
+
+  const handleTimetableExcelImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+
+      const slots = rows.map(r => ({
+        day: (r['Day'] || r['day'] || 'Monday').toString().trim(),
+        time: (r['Time'] || r['Time Interval'] || r['time'] || '09:00 AM - 10:30 AM').toString().trim(),
+        subject: (r['Subject'] || r['Course'] || r['subject'] || '').toString().trim(),
+        faculty: (r['Faculty Name'] || r['Faculty'] || r['Professor'] || 'Assigned Faculty').toString().trim(),
+        breakTime: (r['Break Time'] || r['Break'] || 'None').toString().trim(),
+        remarks: (r['Remarks'] || r['Venue'] || r['Room'] || 'Classroom').toString().trim()
+      })).filter(r => r.subject);
+
+      if (slots.length === 0) {
+        showToast('No valid lecture slots found. Ensure columns: Day, Time, Subject, Faculty Name', 'error');
+        e.target.value = '';
+        return;
+      }
+
+      const res = await batchUploadTimetable(selectedTTInstitute, selectedTTSemester, slots);
+      showToast(`Timetable imported: ${res.count} lecture slots saved for ${selectedTTInstitute} (${selectedTTSemester})!`);
+      await loadAllData();
+    } catch (err) {
+      showToast('Timetable import error: ' + err.message, 'error');
+    }
+    e.target.value = '';
+  };
+
+  const handleResetWebsite = async (includeRoster = false) => {
+    try {
+      setResetting(true);
+      await resetToFreshState(includeRoster);
+      showToast(includeRoster
+        ? 'Website completely reset to factory blank state (roster cleared).'
+        : 'All demo elements removed! Website reset to fresh state.');
+      setShowResetModal(false);
+      await loadAllData();
+    } catch (err) {
+      showToast('Reset failed: ' + err.message, 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleLoadSampleData = async () => {
+    try {
+      setResetting(true);
+      await loadSampleDataset();
+      showToast('Sample demo dataset loaded successfully across all modules!');
+      await loadAllData();
+    } catch (err) {
+      showToast('Load sample dataset failed: ' + err.message, 'error');
+    } finally {
+      setResetting(false);
+    }
   };
 
   // ── Notice Actions ───────────────────────────────────────────
@@ -806,6 +875,126 @@ export default function Admin() {
                   </table>
                 </div>
               </div>
+
+              {/* Excel Sample Spreadsheet Templates Panel */}
+              <div style={{ background: '#fff', borderRadius: 18, border: '1px solid var(--border)', padding: '24px', marginTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>Excel Spreadsheet Templates (.xlsx)</h3>
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                      Download pre-formatted sample Excel spreadsheets for bulk data import into the portal.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('students')}
+                    className="btn btn-ghost"
+                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
+                  >
+                    <Download size={18} color="#0284C7" style={{ flexShrink: 0 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Student Roster Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Name, Roll No, Institute, Specialization</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('attendance')}
+                    className="btn btn-ghost"
+                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
+                  >
+                    <Download size={18} color="#10B981" style={{ flexShrink: 0 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Attendance Records Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Roll No, Name, Institute, Attendance %</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('timetable')}
+                    className="btn btn-ghost"
+                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
+                  >
+                    <Download size={18} color="#D97706" style={{ flexShrink: 0 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Timetable Schedule Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Day, Time, Subject, Faculty, Break</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('faculty')}
+                    className="btn btn-ghost"
+                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
+                  >
+                    <Download size={18} color="#7C3AED" style={{ flexShrink: 0 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Faculty Directory Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Name, Designation, Department, Email</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('notices')}
+                    className="btn btn-ghost"
+                    style={{ justifyContent: 'flex-start', padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E2E8F0', height: 'auto', background: '#F8FAFC' }}
+                  >
+                    <Download size={18} color="#EF4444" style={{ flexShrink: 0 }} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>Official Notices Sample</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>Title, Category, Institute, Description</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Fresh Website / Demo Elements Management */}
+              <div style={{ background: '#FFFBEB', borderRadius: 18, border: '1px solid #FDE68A', padding: '24px', marginTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Shield size={18} color="#B45309" />
+                      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#92400E' }}>Fresh Website & Demo Elements Control</h3>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#B45309', marginTop: 6, maxWidth: 650, lineHeight: 1.5 }}>
+                      Remove all demo mock items (notes, timetable, notices, news, alerts, faculty, and attendance) to run a 100% fresh, clean production website. Any updates you make will immediately sync live to student portals.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSampleData()}
+                      disabled={resetting}
+                      className="btn"
+                      style={{ background: '#fff', border: '1px solid #FCD34D', color: '#92400E', padding: '10px 16px', borderRadius: 10, fontWeight: 700, fontSize: 13 }}
+                    >
+                      Load Sample Dataset
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetIncludeRoster(false);
+                        setShowResetModal(true);
+                      }}
+                      disabled={resetting}
+                      className="btn"
+                      style={{ background: '#DC2626', border: 'none', color: '#fff', padding: '10px 18px', borderRadius: 10, fontWeight: 700, fontSize: 13, boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)' }}
+                    >
+                      <Trash2 size={15} />
+                      <span>Start Fresh Website (Remove Demo)</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -850,7 +1039,18 @@ export default function Admin() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('students')}
+                    className="btn btn-ghost"
+                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
+                    title="Download Student Roster Sample Excel Sheet (.xlsx)"
+                  >
+                    <Download size={16} />
+                    <span>Sample Excel</span>
+                  </button>
+
                   <label
                     className="btn btn-ghost"
                     style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: '1px dashed var(--border)' }}
@@ -987,7 +1187,18 @@ export default function Admin() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('attendance')}
+                    className="btn btn-ghost"
+                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
+                    title="Download Attendance Sample Excel Sheet (.xlsx)"
+                  >
+                    <Download size={16} />
+                    <span>Sample Excel</span>
+                  </button>
+
                   <label
                     className="btn btn-ghost"
                     style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: '1px dashed var(--border)' }}
@@ -1202,14 +1413,37 @@ export default function Admin() {
                   </select>
                 </div>
 
-                <button
-                  onClick={() => setShowAddSlotModal(true)}
-                  className="btn btn-primary"
-                  style={{ height: 40, padding: '0 16px' }}
-                >
-                  <Plus size={16} />
-                  <span>Add Lecture Slot</span>
-                </button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('timetable')}
+                    className="btn btn-ghost"
+                    style={{ height: 40, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
+                    title="Download Timetable Sample Excel Sheet (.xlsx)"
+                  >
+                    <Download size={15} />
+                    <span>Sample Excel</span>
+                  </button>
+
+                  <label
+                    className="btn btn-ghost"
+                    style={{ height: 40, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: '1px dashed var(--border)' }}
+                    title="Upload timetable schedule via Excel"
+                  >
+                    <Upload size={15} />
+                    <span>Import Timetable</span>
+                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleTimetableExcelImport} style={{ display: 'none' }} />
+                  </label>
+
+                  <button
+                    onClick={() => setShowAddSlotModal(true)}
+                    className="btn btn-primary"
+                    style={{ height: 40, padding: '0 16px' }}
+                  >
+                    <Plus size={16} />
+                    <span>Add Lecture Slot</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ background: '#fff', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -1275,18 +1509,31 @@ export default function Admin() {
           {/* ══════════════ TAB: NOTICES ══════════════ */}
           {activeTab === 'notices' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Important notices are highlighted on student overview dashboards.
                 </span>
-                <button
-                  onClick={() => setShowAddNoticeModal(true)}
-                  className="btn btn-primary"
-                  style={{ height: 42, padding: '0 18px' }}
-                >
-                  <Plus size={16} />
-                  <span>Issue New Notice</span>
-                </button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('notices')}
+                    className="btn btn-ghost"
+                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
+                    title="Download Official Notices Sample Excel Sheet"
+                  >
+                    <Download size={16} />
+                    <span>Sample Excel</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowAddNoticeModal(true)}
+                    className="btn btn-primary"
+                    style={{ height: 42, padding: '0 18px' }}
+                  >
+                    <Plus size={16} />
+                    <span>Issue New Notice</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1434,18 +1681,31 @@ export default function Admin() {
           {/* ══════════════ TAB: FACULTY DIRECTORY ══════════════ */}
           {activeTab === 'faculty' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Manage faculty details, office hours, and contact info visible to students.
                 </span>
-                <button
-                  onClick={() => setShowAddFacultyModal(true)}
-                  className="btn btn-primary"
-                  style={{ height: 42, padding: '0 18px' }}
-                >
-                  <Plus size={16} />
-                  <span>Add Faculty Member</span>
-                </button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadSampleExcel('faculty')}
+                    className="btn btn-ghost"
+                    style={{ height: 42, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)' }}
+                    title="Download Faculty Directory Sample Excel Sheet"
+                  >
+                    <Download size={16} />
+                    <span>Sample Excel</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowAddFacultyModal(true)}
+                    className="btn btn-primary"
+                    style={{ height: 42, padding: '0 18px' }}
+                  >
+                    <Plus size={16} />
+                    <span>Add Faculty Member</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -2145,6 +2405,79 @@ export default function Admin() {
               <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Faculty Member</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ── RESET / FRESH WEBSITE CONFIRMATION MODAL ── */}
+      {showResetModal && (
+        <div className="modal-backdrop" onClick={() => setShowResetModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--navy)' }}>Reset to Fresh Website</h3>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Clean Slate / Demo Element Removal</div>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowResetModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 14, color: 'var(--slate)', lineHeight: 1.6, marginBottom: 16 }}>
+              This will remove all demo/mock elements across all modules:
+            </p>
+            <ul style={{ fontSize: 13, color: 'var(--slate)', lineHeight: 1.8, paddingLeft: 20, marginBottom: 20 }}>
+              <li>Study notes & course materials</li>
+              <li>Timetable & lecture schedules</li>
+              <li>Attendance percentages & sync logs</li>
+              <li>Announcements & official notices</li>
+              <li>Daily news articles & live broadcast alerts</li>
+              <li>Faculty directory entries</li>
+            </ul>
+
+            <div style={{ background: '#F8FAFC', border: '1px solid var(--border)', borderRadius: 12, padding: '14px', marginBottom: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={resetIncludeRoster}
+                  onChange={e => setResetIncludeRoster(e.target.checked)}
+                  style={{ marginTop: 3 }}
+                />
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>
+                    Also delete student roster & registered logins (Factory Blank)
+                  </span>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                    Leave unchecked to preserve student enrollment so students can still log in.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="btn btn-ghost"
+                style={{ flex: 1, height: 44 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResetWebsite(resetIncludeRoster)}
+                disabled={resetting}
+                className="btn"
+                style={{ flex: 1, height: 44, background: '#DC2626', color: '#fff', fontWeight: 700, border: 'none' }}
+              >
+                {resetting ? 'Resetting...' : 'Confirm & Start Fresh'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

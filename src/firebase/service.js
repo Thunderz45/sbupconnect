@@ -1,4 +1,5 @@
 import { db } from './config';
+import * as XLSX from 'xlsx';
 import {
   collection, getDocs, getDoc, doc, setDoc, deleteDoc,
   query, where, limit, writeBatch, serverTimestamp, onSnapshot
@@ -37,14 +38,18 @@ try {
 }
 
 export function notifyDataChanged(entity = 'all') {
+  const payload = { type: 'DATA_UPDATED', entity, timestamp: Date.now() };
+
   if (broadcastChannel) {
     try {
-      broadcastChannel.postMessage({ type: 'DATA_UPDATED', entity, timestamp: Date.now() });
+      broadcastChannel.postMessage(payload);
     } catch (e) { /* ignore */ }
   }
   if (typeof window !== 'undefined') {
     try {
-      window.dispatchEvent(new CustomEvent('sbup:datasync', { detail: { entity, timestamp: Date.now() } }));
+      window.dispatchEvent(new CustomEvent('sbup:datasync', { detail: payload }));
+      // Also update localStorage timestamp to fire native browser storage events across all tabs
+      localStorage.setItem('sbup_sync_ping', JSON.stringify(payload));
     } catch (e) { /* ignore */ }
   }
 }
@@ -64,16 +69,27 @@ export function subscribeToSync(callback) {
     }
   };
 
+  const handleStorageEvent = (e) => {
+    if (e.key === 'sbup_sync_ping' && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        callback(parsed);
+      } catch (err) { /* ignore */ }
+    }
+  };
+
   if (broadcastChannel) {
     broadcastChannel.addEventListener('message', handleMessage);
   }
   window.addEventListener('sbup:datasync', handleCustomEvent);
+  window.addEventListener('storage', handleStorageEvent);
 
   return () => {
     if (broadcastChannel) {
       broadcastChannel.removeEventListener('message', handleMessage);
     }
     window.removeEventListener('sbup:datasync', handleCustomEvent);
+    window.removeEventListener('storage', handleStorageEvent);
   };
 }
 
@@ -130,8 +146,8 @@ export const SEMESTERS = [
   'Trimester 1', 'Trimester 2', 'Trimester 3', 'Trimester 4', 'Trimester 5', 'Trimester 6'
 ];
 
-// ── Default Mock Data ──────────────────────────────────────────
-const DEFAULT_STUDENTS = [
+// ── Default / Sample Data ──────────────────────────────────────
+export const SAMPLE_STUDENTS = [
   { name: 'Bhushan Padghan',  rollNumber: '20230948271', institute: 'BIMM',   specialization: 'Data Science and Business Analytics', semester: 'Semester 1' },
   { name: 'Aarav Sharma',     rollNumber: '20230948272', institute: 'BITM',   specialization: 'Telecom Management',                  semester: 'Semester 1' },
   { name: 'Priya Patel',      rollNumber: '20230948273', institute: 'BIIB',   specialization: 'International Business',              semester: 'Semester 2' },
@@ -139,7 +155,7 @@ const DEFAULT_STUDENTS = [
   { name: 'Sneha Deshmukh',   rollNumber: '20230948275', institute: 'SBSCS',  specialization: 'Computer Science and AI Systems',     semester: 'Semester 3' },
 ];
 
-const DEFAULT_ATTENDANCE = {
+export const SAMPLE_ATTENDANCE = {
   '20230948271': { studentName: 'Bhushan Padghan', rollNumber: '20230948271', institute: 'BIMM', specialization: 'Data Science and Business Analytics', attendance: 88, lastUpdated: 'Sept 10, 2026' },
   '20230948272': { studentName: 'Aarav Sharma',    rollNumber: '20230948272', institute: 'BITM', specialization: 'Telecom Management', attendance: 78, lastUpdated: 'Sept 10, 2026' },
   '20230948273': { studentName: 'Priya Patel',     rollNumber: '20230948273', institute: 'BIIB', specialization: 'International Business', attendance: 92, lastUpdated: 'Sept 10, 2026' },
@@ -147,7 +163,7 @@ const DEFAULT_ATTENDANCE = {
   '20230948275': { studentName: 'Sneha Deshmukh',  rollNumber: '20230948275', institute: 'SBSCS', specialization: 'Computer Science and AI Systems', attendance: 95, lastUpdated: 'Sept 10, 2026' },
 };
 
-const DEFAULT_NOTES = [
+export const SAMPLE_NOTES = [
   {
     id: 'note-1',
     subject: 'Advanced Predictive Analytics',
@@ -222,7 +238,7 @@ const DEFAULT_NOTES = [
   }
 ];
 
-const DEFAULT_TIMETABLES = [
+export const SAMPLE_TIMETABLES = [
   {
     id: 'tt-bimm-sem1',
     institute: 'BIMM',
@@ -267,7 +283,7 @@ const DEFAULT_TIMETABLES = [
   }
 ];
 
-const DEFAULT_NOTICES = [
+export const SAMPLE_NOTICES = [
   {
     id: 'notice-1',
     title: 'Trimester I End-Term Examination Schedule & Hall Tickets',
@@ -310,7 +326,7 @@ const DEFAULT_NOTICES = [
   }
 ];
 
-const DEFAULT_NEWS = [
+export const SAMPLE_NEWS = [
   {
     id: 'news-1',
     title: 'SBUP Ranked Among Top Management Institutions in Western India',
@@ -337,7 +353,7 @@ const DEFAULT_NEWS = [
   }
 ];
 
-const DEFAULT_NOTIFICATIONS = [
+export const SAMPLE_NOTIFICATIONS = [
   {
     id: 'notif-1',
     title: 'Admit Card Alert',
@@ -370,7 +386,7 @@ const DEFAULT_NOTIFICATIONS = [
   }
 ];
 
-const DEFAULT_FACULTY = [
+export const SAMPLE_FACULTY = [
   {
     id: 'fac-1',
     name: 'Dr. S. Kulkarni',
@@ -413,11 +429,35 @@ const DEFAULT_FACULTY = [
   }
 ];
 
+// ── Clean / Fresh Defaults (No mock demo data clutter) ────────
+export const DEFAULT_STUDENTS = SAMPLE_STUDENTS;
+export const DEFAULT_ATTENDANCE = {};
+export const DEFAULT_NOTES = [];
+export const DEFAULT_TIMETABLES = [];
+export const DEFAULT_NOTICES = [];
+export const DEFAULT_NEWS = [];
+export const DEFAULT_NOTIFICATIONS = [];
+export const DEFAULT_FACULTY = [];
+
+// Automatic fresh initialization check on first load:
+if (typeof window !== 'undefined' && !localStorage.getItem('sbup_fresh_ready_v2')) {
+  try {
+    localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_NOTICES_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_TIMETABLE_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_NEWS_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_NOTIF_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_FACULTY_KEY, JSON.stringify([]));
+    localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify({}));
+    localStorage.setItem('sbup_fresh_ready_v2', 'true');
+  } catch (e) { /* ignore */ }
+}
+
 // ── Generic Local Storage Helpers ──────────────────────────────
 function getLocalItem(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
+    if (raw !== null) return JSON.parse(raw);
   } catch (e) { /* ignore */ }
   localStorage.setItem(key, JSON.stringify(fallback));
   return fallback;
@@ -1311,5 +1351,94 @@ export async function deleteFaculty(id) {
   saveLocalItem(LOCAL_FACULTY_KEY, all.filter(f => f.id !== id));
 
   notifyDataChanged('faculty');
+  return { success: true };
+}
+
+// ── 10. Excel Sample Generator ─────────────────────────────────
+
+export function downloadSampleExcel(type) {
+  const wb = XLSX.utils.book_new();
+  let ws, filename;
+
+  if (type === 'students') {
+    const data = [
+      { 'Student Name': 'Bhushan Padghan', 'Roll Number': '20230948271', 'Institute': 'BIMM', 'Specialization': 'Data Science and Business Analytics', 'Semester': 'Semester 1' },
+      { 'Student Name': 'Aarav Sharma',     'Roll Number': '20230948272', 'Institute': 'BITM', 'Specialization': 'Telecom Management',                  'Semester': 'Semester 1' },
+      { 'Student Name': 'Priya Patel',      'Roll Number': '20230948273', 'Institute': 'BIIB', 'Specialization': 'International Business',              'Semester': 'Semester 2' },
+      { 'Student Name': 'Rohit Joshi',      'Roll Number': '20230948274', 'Institute': 'BIMHRD', 'Specialization': 'Human Resources',                  'Semester': 'Semester 1' },
+      { 'Student Name': 'Sneha Deshmukh',   'Roll Number': '20230948275', 'Institute': 'SBSCS', 'Specialization': 'Computer Science and AI Systems',  'Semester': 'Semester 3' }
+    ];
+    ws = XLSX.utils.json_to_sheet(data);
+    filename = 'SBUP_Student_Roster_Sample.xlsx';
+  } else if (type === 'attendance') {
+    const data = [
+      { 'Roll Number': '20230948271', 'Student Name': 'Bhushan Padghan', 'Institute': 'BIMM',   'Specialization': 'Data Science and Business Analytics', 'Attendance %': '88%' },
+      { 'Roll Number': '20230948272', 'Student Name': 'Aarav Sharma',    'Institute': 'BITM',   'Specialization': 'Telecom Management',                  'Attendance %': '78%' },
+      { 'Roll Number': '20230948273', 'Student Name': 'Priya Patel',     'Institute': 'BIIB',   'Specialization': 'International Business',              'Attendance %': '92%' },
+      { 'Roll Number': '20230948274', 'Student Name': 'Rohit Joshi',     'Institute': 'BIMHRD', 'Specialization': 'Human Resources',                     'Attendance %': '71%' },
+      { 'Roll Number': '20230948275', 'Student Name': 'Sneha Deshmukh',  'Institute': 'SBSCS',  'Specialization': 'Computer Science and AI Systems',     'Attendance %': '95%' }
+    ];
+    ws = XLSX.utils.json_to_sheet(data);
+    filename = 'SBUP_Attendance_Records_Sample.xlsx';
+  } else if (type === 'timetable') {
+    const data = [
+      { 'Day': 'Monday',    'Time': '09:00 AM - 10:30 AM', 'Subject': 'Business Analytics & Decision Science', 'Faculty Name': 'Dr. S. Kulkarni', 'Break Time': '10:30 AM - 10:45 AM',       'Remarks': 'Hall 4B' },
+      { 'Day': 'Monday',    'Time': '10:45 AM - 12:15 PM', 'Subject': 'Financial Management & Corporate Finance', 'Faculty Name': 'Prof. V. Sharma', 'Break Time': '12:15 PM - 01:15 PM (Lunch)', 'Remarks': 'Hall 4B' },
+      { 'Day': 'Tuesday',   'Time': '09:00 AM - 10:30 AM', 'Subject': 'Data Visualization & BI Tools',        'Faculty Name': 'Dr. S. Kulkarni', 'Break Time': '10:30 AM - 10:45 AM',       'Remarks': 'Lab 1' },
+      { 'Day': 'Wednesday', 'Time': '09:00 AM - 10:30 AM', 'Subject': 'Business Analytics & Decision Science', 'Faculty Name': 'Dr. S. Kulkarni', 'Break Time': '10:30 AM - 10:45 AM',       'Remarks': 'Hall 4B' },
+      { 'Day': 'Friday',    'Time': '10:45 AM - 01:15 PM', 'Subject': 'Python Analytics Practical Lab',       'Faculty Name': 'Dr. S. Kulkarni', 'Break Time': '15 min tea break',          'Remarks': 'Lab 2' }
+    ];
+    ws = XLSX.utils.json_to_sheet(data);
+    filename = 'SBUP_Timetable_Schedule_Sample.xlsx';
+  } else if (type === 'faculty') {
+    const data = [
+      { 'Faculty Name': 'Dr. S. Kulkarni',   'Designation': 'Professor & HOD', 'Institute': 'BIMM', 'Department': 'Business Analytics', 'Email': 's.kulkarni@bimm.sbup.edu.in', 'Cabin': 'BIMM Room 304', 'Office Hours': 'Mon-Wed 3:00 PM - 5:00 PM' },
+      { 'Faculty Name': 'Prof. Anjali Verma', 'Designation': 'Associate Professor', 'Institute': 'BIMM', 'Department': 'Business Intelligence', 'Email': 'anjali.verma@bimm.sbup.edu.in', 'Cabin': 'BIMM Cabin 12', 'Office Hours': 'Tue-Thu 2:00 PM - 4:00 PM' }
+    ];
+    ws = XLSX.utils.json_to_sheet(data);
+    filename = 'SBUP_Faculty_Directory_Sample.xlsx';
+  } else if (type === 'notices') {
+    const data = [
+      { 'Title': 'Trimester End-Term Exam Schedule Released', 'Category': 'Examination', 'Institute': 'All', 'Priority': 'high', 'Description': 'Official datesheet is available on the portal. Download your hall tickets.', 'Date': 'Sept 10, 2026' }
+    ];
+    ws = XLSX.utils.json_to_sheet(data);
+    filename = 'SBUP_Official_Notices_Sample.xlsx';
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Sample_Data');
+  XLSX.writeFile(wb, filename);
+}
+
+// ── 11. System Reset & Fresh Website State ─────────────────────
+
+export async function resetToFreshState(includeRoster = false) {
+  saveLocalItem(LOCAL_NOTES_KEY, []);
+  saveLocalItem(LOCAL_NOTICES_KEY, []);
+  saveLocalItem(LOCAL_TIMETABLE_KEY, []);
+  saveLocalItem(LOCAL_NEWS_KEY, []);
+  saveLocalItem(LOCAL_NOTIF_KEY, []);
+  saveLocalItem(LOCAL_FACULTY_KEY, []);
+  saveLocalItem(LOCAL_ATTENDANCE_KEY, {});
+
+  if (includeRoster) {
+    saveLocalItem(LOCAL_STUDENT_LIST_KEY, []);
+    saveLocalItem(LOCAL_REGISTERED_KEY, {});
+  }
+
+  notifyDataChanged('all');
+  return { success: true };
+}
+
+export async function loadSampleDataset() {
+  saveLocalItem(LOCAL_STUDENT_LIST_KEY, SAMPLE_STUDENTS);
+  saveLocalItem(LOCAL_ATTENDANCE_KEY, SAMPLE_ATTENDANCE);
+  saveLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
+  saveLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
+  saveLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
+  saveLocalItem(LOCAL_NEWS_KEY, SAMPLE_NEWS);
+  saveLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
+  saveLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
+
+  notifyDataChanged('all');
   return { success: true };
 }
