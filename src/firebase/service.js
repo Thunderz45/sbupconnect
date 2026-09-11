@@ -472,12 +472,16 @@ function saveLocalItem(key, data) {
 // ── 1. Student List & Verification ─────────────────────────────
 
 export async function verifyRollNumber(rollNumber) {
-  const clean = String(rollNumber).trim();
+  const clean = String(rollNumber || '').trim();
   if (!clean) return { exists: false, error: 'Please enter a roll number.' };
+  const cleanUpper = clean.toUpperCase();
 
   try {
     const docRef = doc(db, 'student_list', clean);
-    const snap = await getDoc(docRef);
+    let snap = await getDoc(docRef);
+    if (!snap.exists() && cleanUpper !== clean) {
+      snap = await getDoc(doc(db, 'student_list', cleanUpper));
+    }
     if (snap.exists()) {
       return { exists: true, student: { rollNumber: clean, ...snap.data() } };
     }
@@ -486,9 +490,9 @@ export async function verifyRollNumber(rollNumber) {
   }
 
   const localList = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS);
-  const found = localList.find(s => String(s.rollNumber).trim() === clean);
+  const found = localList.find(s => String(s.rollNumber || '').trim().toUpperCase() === cleanUpper);
   if (found) {
-    return { exists: true, student: { ...found, rollNumber: clean, semester: found.semester || 'Semester 1' } };
+    return { exists: true, student: { ...found, rollNumber: found.rollNumber || clean, semester: found.semester || 'Semester 1' } };
   }
 
   return { exists: false, error: 'Roll number not found in the university database. Contact your admin.' };
@@ -840,21 +844,28 @@ export function parseAttendanceValue(raw, fallback = 85) {
 // ── 3. Attendance Management ───────────────────────────────────
 
 export async function getStudentAttendance(rollNumber) {
-  const clean = String(rollNumber).trim();
+  const clean = String(rollNumber || '').trim();
+  const cleanUpper = clean.toUpperCase();
   try {
     const docRef = doc(db, 'attendance', clean);
-    const snap = await getDoc(docRef);
+    let snap = await getDoc(docRef);
+    if (!snap.exists() && cleanUpper !== clean) {
+      snap = await getDoc(doc(db, 'attendance', cleanUpper));
+    }
     if (snap.exists()) return snap.data();
   } catch (e) {
     console.warn('Firestore getStudentAttendance warning:', e.message);
   }
 
-  const attMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE);
-  if (attMap && attMap[clean]) return attMap[clean];
+  const attMap = getLocalItem(LOCAL_ATTENDANCE_KEY, DEFAULT_ATTENDANCE) || {};
+  if (attMap[clean]) return attMap[clean];
+  if (attMap[cleanUpper]) return attMap[cleanUpper];
+  const foundInMap = Object.entries(attMap).find(([k]) => k.trim().toUpperCase() === cleanUpper);
+  if (foundInMap) return foundInMap[1];
 
   // Fallback to local student list if attendance was recorded there
-  const localStudents = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS);
-  const s = localStudents.find(st => String(st.rollNumber).trim() === clean);
+  const localStudents = getLocalItem(LOCAL_STUDENT_LIST_KEY, DEFAULT_STUDENTS) || [];
+  const s = localStudents.find(st => String(st.rollNumber).trim().toUpperCase() === cleanUpper);
   if (s && s.attendance !== undefined && s.attendance !== null) {
     return {
       rollNumber: clean,
