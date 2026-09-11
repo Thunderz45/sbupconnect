@@ -1,29 +1,26 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDUAQN2-3-tBlWq0kGxN-wNud9Zmu2zV40",
-  authDomain: "sbupconnect.firebaseapp.com",
-  projectId: "sbupconnect",
-  storageBucket: "sbupconnect.firebasestorage.app",
-  messagingSenderId: "531957749526",
-  appId: "1:531957749526:web:f465be8f237b94cfba2237",
-  measurementId: "G-SM6PXN96ZY"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAAf6EWyhBcbOQcGmdXN-95XL7cNbPl0NM",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "sbupconnect-3ff6c.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "sbupconnect-3ff6c",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "sbupconnect-3ff6c.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "842142539208",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:842142539208:web:a212b274aef1b37e93b4fd",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-TQLDK4CB9Z"
 };
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// Enable offline persistence
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Firestore persistence: multiple tabs, disabled for extra tab.');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Firestore persistence not supported in this browser.');
+try {
+  if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
+    getAnalytics(app);
   }
-});
-
-try { getAnalytics(app); } catch(e) {}
+} catch (e) {
+  /* analytics not available in dev or ssr */
+}
 
 export default app;

@@ -5,12 +5,15 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [student, setStudent] = useState(null);
-  const [role, setRole] = useState('student'); // 'student' | 'admin'
+  const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const session = getCurrentSession();
-    if (session) setStudent(session);
+    if (session) {
+      setStudent(session);
+      if (session.role) setRole(session.role);
+    }
     setLoading(false);
   }, []);
 

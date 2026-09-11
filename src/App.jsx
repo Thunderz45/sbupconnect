@@ -1,10 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login      from './pages/Login';
-import Portal     from './pages/Portal';
-import AdminLogin from './pages/AdminLogin';
-import Admin      from './pages/Admin';
+import Login            from './pages/Login';
+import Register         from './pages/Register';
+import Portal           from './pages/Portal';
+import StudentDashboard from './pages/StudentDashboard';
+import AdminLogin       from './pages/AdminLogin';
+import Admin            from './pages/Admin';
+import Seed             from './pages/Seed';
 
 function ProtectedStudent({ children }) {
   const { student, loading } = useAuth();
@@ -15,7 +18,7 @@ function ProtectedStudent({ children }) {
 function ProtectedAdmin({ children }) {
   const { student, role, loading } = useAuth();
   if (loading) return null;
-  return (student && role === 'admin') ? children : <Navigate to="/admin" replace />;
+  return (student && (role === 'admin' || student.role === 'admin')) ? children : <Navigate to="/admin" replace />;
 }
 
 export default function App() {
@@ -23,11 +26,16 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/"       element={<Login />} />
-          <Route path="/portal" element={<ProtectedStudent><Portal /></ProtectedStudent>} />
-          <Route path="/admin"  element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<ProtectedAdmin><Admin /></ProtectedAdmin>} />
-          <Route path="*"       element={<Navigate to="/" replace />} />
+          <Route path="/"                  element={<Login />} />
+          <Route path="/register"          element={<Register />} />
+          <Route path="/portal"            element={<ProtectedStudent><Portal /></ProtectedStudent>} />
+          <Route path="/dashboard"         element={<ProtectedStudent><StudentDashboard /></ProtectedStudent>} />
+          <Route path="/dashboard/:page"    element={<ProtectedStudent><StudentDashboard /></ProtectedStudent>} />
+          <Route path="/student-dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/admin"             element={<AdminLogin />} />
+          <Route path="/admin/dashboard"   element={<ProtectedAdmin><Admin /></ProtectedAdmin>} />
+          <Route path="/seed"              element={<Seed />} />
+          <Route path="*"                  element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
