@@ -825,6 +825,8 @@ export function parseAttendanceValue(raw, fallback = 85) {
       return Math.min(100, Math.max(0, Math.round((n / d) * 100)));
     }
   }
+
+  const clean = str.replace('%', '').trim();
   if (/^present$/i.test(clean) || /^p$/i.test(clean)) return 100;
   if (/^absent$/i.test(clean) || /^a$/i.test(clean)) return 0;
   const num = parseFloat(clean);
