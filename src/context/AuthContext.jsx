@@ -4,11 +4,28 @@ import { getCurrentSession, clearSession } from '../firebase/service';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [student, setStudent] = useState(null);
-  const [role, setRole] = useState('student');
-  const [loading, setLoading] = useState(true);
+  const [student, setStudent] = useState(() => {
+    try {
+      const session = getCurrentSession();
+      return session || null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [role, setRole] = useState(() => {
+    try {
+      const session = getCurrentSession();
+      return session?.role || 'student';
+    } catch (e) {
+      return 'student';
+    }
+  });
+
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Re-verify session in background
     const session = getCurrentSession();
     if (session) {
       setStudent(session);
@@ -18,12 +35,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = (studentData, userRole = 'student') => {
-    setStudent(studentData);
+    const sessionObj = { ...studentData, role: userRole };
+    try {
+      localStorage.setItem('sbup_session', JSON.stringify(sessionObj));
+    } catch (e) {
+      console.warn('Error saving session:', e);
+    }
+    setStudent(sessionObj);
     setRole(userRole);
   };
 
   const logout = () => {
     clearSession();
+    try {
+      localStorage.removeItem('sbup_session');
+    } catch (e) { /* ignore */ }
     setStudent(null);
     setRole('student');
   };

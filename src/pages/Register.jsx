@@ -10,7 +10,17 @@ import {
 
 export default function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, student, role, loading: authLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (!authLoading && student) {
+      if (role === 'admin' || student.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [student, role, authLoading, navigate]);
 
   // Step 1: Roll number verification
   const [rollNumber, setRollNumber] = useState('');

@@ -21,18 +21,39 @@ function ProtectedAdmin({ children }) {
   return (student && (role === 'admin' || student.role === 'admin')) ? children : <Navigate to="/admin" replace />;
 }
 
+function PublicStudentRoute({ children }) {
+  const { student, role, loading } = useAuth();
+  if (loading) return null;
+  if (student) {
+    if (role === 'admin' || student.role === 'admin') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+function PublicAdminRoute({ children }) {
+  const { student, role, loading } = useAuth();
+  if (loading) return null;
+  if (student && (role === 'admin' || student.role === 'admin')) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/"                  element={<Login />} />
-          <Route path="/register"          element={<Register />} />
+          <Route path="/"                  element={<PublicStudentRoute><Login /></PublicStudentRoute>} />
+          <Route path="/register"          element={<PublicStudentRoute><Register /></PublicStudentRoute>} />
           <Route path="/portal"            element={<ProtectedStudent><Portal /></ProtectedStudent>} />
           <Route path="/dashboard"         element={<ProtectedStudent><StudentDashboard /></ProtectedStudent>} />
           <Route path="/dashboard/:page"    element={<ProtectedStudent><StudentDashboard /></ProtectedStudent>} />
           <Route path="/student-dashboard" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/admin"             element={<AdminLogin />} />
+          <Route path="/admin"             element={<PublicAdminRoute><AdminLogin /></PublicAdminRoute>} />
           <Route path="/admin/dashboard"   element={<ProtectedAdmin><Admin /></ProtectedAdmin>} />
           <Route path="/seed"              element={<Seed />} />
           <Route path="*"                  element={<Navigate to="/" replace />} />

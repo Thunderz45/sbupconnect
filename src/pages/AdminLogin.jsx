@@ -11,8 +11,14 @@ export default function AdminLogin() {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, student, role, loading: authLoading } = useAuth();
   const navigate  = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && student && (role === 'admin' || student.role === 'admin')) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [student, role, authLoading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

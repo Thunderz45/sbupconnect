@@ -43,6 +43,74 @@ export default function StudentDashboard() {
   const [notesSearch, setNotesSearch] = useState('');
   const [noticeCategoryFilter, setNoticeCategoryFilter] = useState('all');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
+
+  // Mobile layout notification permission state
+  const [showMobileNotifPrompt, setShowMobileNotifPrompt] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'unsupported';
+  });
+
+  // Mobile layout notification permission prompt trigger
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isMobile = window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const hasNotification = 'Notification' in window;
+    const dismissed = localStorage.getItem('sbup_mobile_notif_prompt_dismissed');
+
+    if (isMobile && hasNotification && Notification.permission === 'default' && !dismissed) {
+      const timer = setTimeout(() => {
+        setShowMobileNotifPrompt(true);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const triggerToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3800);
+  };
+
+  const handleRequestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      triggerToast('Push notifications are not supported by this browser.');
+      setShowMobileNotifPrompt(false);
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      setShowMobileNotifPrompt(false);
+
+      if (permission === 'granted') {
+        localStorage.setItem('sbup_mobile_notif_enabled', 'true');
+        localStorage.removeItem('sbup_mobile_notif_prompt_dismissed');
+        triggerToast('🔔 Notifications enabled! You will receive live campus broadcasts.');
+
+        try {
+          new Notification('SBUP Connect — Alerts Enabled', {
+            body: 'You will now receive live alerts for lecture timetables, notices & attendance updates.',
+            icon: '/sbup-logo.png'
+          });
+        } catch (err) { /* ignore on mobile browsers requiring SW */ }
+      } else {
+        localStorage.setItem('sbup_mobile_notif_prompt_dismissed', 'true');
+        triggerToast('Notification alerts remained disabled.');
+      }
+    } catch (e) {
+      console.warn('Notification permission error:', e);
+      setShowMobileNotifPrompt(false);
+    }
+  };
+
+  const handleDismissMobileNotifPrompt = () => {
+    setShowMobileNotifPrompt(false);
+    localStorage.setItem('sbup_mobile_notif_prompt_dismissed', 'true');
+  };
 
   useEffect(() => {
     if (!student) return;
@@ -339,6 +407,36 @@ export default function StudentDashboard() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {notificationPermission !== 'unsupported' && (
+              <button
+                onClick={handleRequestNotificationPermission}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: notificationPermission === 'granted' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(14, 165, 233, 0.3)',
+                  background: notificationPermission === 'granted' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(14, 165, 233, 0.12)',
+                  color: notificationPermission === 'granted' ? '#6EE7B7' : '#7DD3FC',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginBottom: 4
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Bell size={13} />
+                  <span>Push Alerts</span>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: 'rgba(255,255,255,0.1)' }}>
+                  {notificationPermission === 'granted' ? 'Active' : 'Enable'}
+                </span>
+              </button>
+            )}
+
             <button
               onClick={() => navigate('/portal')}
               style={{
@@ -523,6 +621,39 @@ export default function StudentDashboard() {
                     <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--navy)' }}>Notifications & Alerts</div>
                     <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{unreadCount} unread</span>
                   </div>
+
+                  {notificationPermission !== 'granted' && notificationPermission !== 'unsupported' && (
+                    <div style={{
+                      marginTop: 10,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      background: '#F0F9FF',
+                      border: '1px solid #BAE6FD',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8
+                    }}>
+                      <div style={{ fontSize: 11, color: '#0369A1', fontWeight: 600 }}>
+                        🔔 Device alerts off
+                      </div>
+                      <button
+                        onClick={handleRequestNotificationPermission}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: '#0284C7',
+                          color: '#fff',
+                          border: 'none',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Turn On
+                      </button>
+                    </div>
+                  )}
 
                   <div style={{ maxHeight: 320, overflowY: 'auto', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {notifications.length === 0 ? (
@@ -1787,6 +1918,136 @@ export default function StudentDashboard() {
 
         </main>
       </div>
+
+      {/* ── MOBILE PUSH NOTIFICATION PERMISSION PROMPT ─────────── */}
+      {showMobileNotifPrompt && (
+        <div
+          id="mobile-notification-prompt"
+          style={{
+            position: 'fixed',
+            bottom: 'clamp(16px, 4vw, 24px)',
+            left: 'clamp(12px, 3vw, 20px)',
+            right: 'clamp(12px, 3vw, 20px)',
+            maxWidth: 420,
+            margin: '0 auto',
+            zIndex: 9999,
+            background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+            color: '#fff',
+            padding: '18px 20px',
+            borderRadius: 20,
+            boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12)',
+            animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            backdropFilter: 'blur(12px)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(14, 165, 233, 0.4)'
+            }}>
+              <Bell size={22} color="#fff" />
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>
+                  Enable Campus Alerts
+                </div>
+                <button
+                  onClick={handleDismissMobileNotifPrompt}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 4, lineHeight: 1.45 }}>
+                Get instant mobile alerts for lecture timetables, official circulars, exam schedules & attendance updates.
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                <button
+                  id="enable-mobile-notif-btn"
+                  onClick={handleRequestNotificationPermission}
+                  style={{
+                    flex: 1,
+                    padding: '9px 14px',
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
+                    color: '#fff',
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 12px rgba(14, 165, 233, 0.4)'
+                  }}
+                >
+                  <Bell size={14} />
+                  <span>Allow Alerts</span>
+                </button>
+
+                <button
+                  onClick={handleDismissMobileNotifPrompt}
+                  style={{
+                    padding: '9px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'rgba(255,255,255,0.8)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Not Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast message container */}
+      {toastMsg && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: 10000,
+          background: 'rgba(15, 23, 42, 0.95)',
+          backdropFilter: 'blur(10px)',
+          color: '#fff',
+          padding: '12px 20px',
+          borderRadius: 14,
+          fontSize: 13,
+          fontWeight: 700,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          animation: 'fadeInUp 0.25s ease'
+        }}>
+          {toastMsg}
+        </div>
+      )}
 
     </div>
   );
