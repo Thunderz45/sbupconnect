@@ -269,18 +269,20 @@ export default function Admin() {
 
       // Instantly update UI states so changes reflect on screen immediately without lag
       setStudents(prevStudents => {
-        const map = new Map(prevStudents.map(s => [String(s.rollNumber).trim(), s]));
+        const map = new Map(prevStudents.map(s => [String(s.rollNumber).trim().toUpperCase(), s]));
         mapped.forEach(s => {
-          const existing = map.get(s.rollNumber) || {};
-          map.set(s.rollNumber, { ...existing, ...s });
+          const k = String(s.rollNumber).trim().toUpperCase();
+          const existing = map.get(k) || {};
+          map.set(k, { ...existing, ...s });
         });
         return Array.from(map.values());
       });
 
       setAttendanceList(prevAtt => {
-        const map = new Map(prevAtt.map(a => [String(a.rollNumber).trim(), a]));
+        const map = new Map(prevAtt.map(a => [String(a.rollNumber).trim().toUpperCase(), a]));
         mapped.forEach(s => {
-          map.set(s.rollNumber, {
+          const k = String(s.rollNumber).trim().toUpperCase();
+          map.set(k, {
             rollNumber: s.rollNumber,
             studentName: s.name,
             institute: s.institute,
