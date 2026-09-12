@@ -57,7 +57,8 @@ export function notifyDataChanged(entity = 'all') {
   try {
     setDoc(doc(db, 'student_list', 'sync_heartbeat'), {
       timestamp: Date.now(),
-      entity
+      entity,
+      rand: Math.random()
     }, { merge: true }).catch(() => {});
   } catch (e) { /* ignore */ }
 }
@@ -92,13 +93,14 @@ export function subscribeToSync(callback) {
   window.addEventListener('sbup:datasync', handleCustomEvent);
   window.addEventListener('storage', handleStorageEvent);
 
-  // Firestore Cross-Device Real-Time Listener (Desktop <-> Mobile Phone)
-  let unsubFirestore = null;
+  // Firestore Cross-Device Real-Time Listeners (Desktop <-> Mobile Phone)
+  const unsubs = [];
   try {
-    let initialLoad = true;
-    unsubFirestore = onSnapshot(doc(db, 'student_list', 'sync_heartbeat'), (snap) => {
-      if (initialLoad) {
-        initialLoad = false;
+    // 1. Heartbeat
+    let initialHeartbeat = true;
+    const unsubHeartbeat = onSnapshot(doc(db, 'student_list', 'sync_heartbeat'), (snap) => {
+      if (initialHeartbeat) {
+        initialHeartbeat = false;
         return;
       }
       if (snap.exists()) {
@@ -106,6 +108,32 @@ export function subscribeToSync(callback) {
         callback({ type: 'DATA_UPDATED', entity: data?.entity || 'all', timestamp: data?.timestamp || Date.now() });
       }
     }, () => {});
+    unsubs.push(unsubHeartbeat);
+
+    // 2. Direct document real-time listeners for all modules
+    const docSyncMap = [
+      { docId: 'sync_notes', key: LOCAL_NOTES_KEY, entity: 'notes' },
+      { docId: 'sync_timetables', key: LOCAL_TIMETABLE_KEY, entity: 'timetable' },
+      { docId: 'sync_notices', key: LOCAL_NOTICES_KEY, entity: 'notices' },
+      { docId: 'sync_news', key: LOCAL_NEWS_KEY, entity: 'news' },
+      { docId: 'sync_notifications', key: LOCAL_NOTIF_KEY, entity: 'notifications' },
+      { docId: 'sync_faculty', key: LOCAL_FACULTY_KEY, entity: 'faculty' }
+    ];
+
+    docSyncMap.forEach(({ docId, key, entity }) => {
+      let initialDoc = true;
+      const unsub = onSnapshot(doc(db, 'student_list', docId), (snap) => {
+        if (initialDoc) {
+          initialDoc = false;
+          return;
+        }
+        if (snap.exists() && snap.data()?.list) {
+          saveLocalItem(key, snap.data().list);
+          callback({ type: 'DATA_UPDATED', entity, timestamp: Date.now() });
+        }
+      }, () => {});
+      unsubs.push(unsub);
+    });
   } catch (e) { /* ignore */ }
 
   return () => {
@@ -114,9 +142,9 @@ export function subscribeToSync(callback) {
     }
     window.removeEventListener('sbup:datasync', handleCustomEvent);
     window.removeEventListener('storage', handleStorageEvent);
-    if (unsubFirestore) {
-      try { unsubFirestore(); } catch (e) { /* ignore */ }
-    }
+    unsubs.forEach(u => {
+      try { if (typeof u === 'function') u(); } catch (e) { /* ignore */ }
+    });
   };
 }
 
@@ -1398,6 +1426,8 @@ export async function createDailyNews(newsItem) {
   const newNews = {
     ...newsItem,
     id: newsItem.id || 'news-' + Date.now(),
+    description: newsItem.description || newsItem.summary || '',
+    summary: newsItem.summary || newsItem.description || '',
     date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   };
 

@@ -12,7 +12,7 @@ import {
   getAllNotifications, createNotification, toggleNotificationStatus, deleteNotification,
   getAllFaculty, createFaculty, deleteFaculty,
   downloadSampleExcel, resetToFreshState, loadSampleDataset,
-  INSTITUTES, SPECIALIZATIONS_BY_INSTITUTE, SEMESTERS, notifyDataChanged
+  INSTITUTES, SPECIALIZATIONS_BY_INSTITUTE, SEMESTERS, notifyDataChanged, subscribeToSync
 } from '../firebase/service';
 import {
   Users, CheckCircle2, Clock, FileText, Bell, AlertTriangle,
@@ -108,6 +108,12 @@ export default function Admin() {
 
   useEffect(() => {
     loadAllData();
+    const unsub = subscribeToSync((event) => {
+      loadAllData();
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
   const showToast = (msg, type = 'success') => {

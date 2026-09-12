@@ -136,6 +136,13 @@ export default function StudentDashboard() {
   const unreadCount = notifications.filter(n => !n.read).length;
   const topAnnouncement = notifications.find(n => n.type === 'urgent' || n.type === 'exam') || notifications[0];
 
+  // If a new urgent/exam announcement broadcast is issued by Admin, reveal the banner
+  useEffect(() => {
+    if (topAnnouncement?.id) {
+      setDismissedBanner(false);
+    }
+  }, [topAnnouncement?.id]);
+
   // Schedule filtering by day
   const filteredSchedule = timetable?.schedule?.filter(s => s.day === selectedDay) || [];
 
@@ -1532,7 +1539,7 @@ export default function StudentDashboard() {
                             {item.title}
                           </div>
                           <div style={{ fontSize: 13, color: 'var(--slate)', marginTop: 8, lineHeight: 1.5 }}>
-                            {item.description}
+                            {item.description || item.summary}
                           </div>
                         </div>
 
