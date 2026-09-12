@@ -456,29 +456,15 @@ export const SAMPLE_FACULTY = [
   }
 ];
 
-// ── Clean / Fresh Defaults (No mock demo data clutter) ────────
+// ── Connected Defaults (Full University Repository) ───────────
 export const DEFAULT_STUDENTS = SAMPLE_STUDENTS;
-export const DEFAULT_ATTENDANCE = {};
-export const DEFAULT_NOTES = [];
-export const DEFAULT_TIMETABLES = [];
-export const DEFAULT_NOTICES = [];
-export const DEFAULT_NEWS = [];
-export const DEFAULT_NOTIFICATIONS = [];
-export const DEFAULT_FACULTY = [];
-
-// Automatic fresh initialization check on first load:
-if (typeof window !== 'undefined' && !localStorage.getItem('sbup_fresh_ready_v2')) {
-  try {
-    localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_NOTICES_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_TIMETABLE_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_NEWS_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_NOTIF_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_FACULTY_KEY, JSON.stringify([]));
-    localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify({}));
-    localStorage.setItem('sbup_fresh_ready_v2', 'true');
-  } catch (e) { /* ignore */ }
-}
+export const DEFAULT_ATTENDANCE = SAMPLE_ATTENDANCE;
+export const DEFAULT_NOTES = SAMPLE_NOTES;
+export const DEFAULT_TIMETABLES = SAMPLE_TIMETABLES;
+export const DEFAULT_NOTICES = SAMPLE_NOTICES;
+export const DEFAULT_NEWS = SAMPLE_NEWS;
+export const DEFAULT_NOTIFICATIONS = SAMPLE_NOTIFICATIONS;
+export const DEFAULT_FACULTY = SAMPLE_FACULTY;
 
 // ── Generic Local Storage Helpers ──────────────────────────────
 function getLocalItem(key, fallback) {
@@ -1110,18 +1096,29 @@ export async function getNotes(institute, specialization) {
     const snap = await getDoc(doc(db, 'student_list', 'sync_notes'));
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTES_KEY, snap.data().list);
+    } else {
+      // Auto-connect and seed repository to Firestore if not yet populated
+      await setDoc(doc(db, 'student_list', 'sync_notes'), { list: SAMPLE_NOTES }, { merge: true });
+      saveLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
     }
   } catch (e) {
     console.warn('Firestore getNotes fetch warning, reading cached/local store:', e.message);
   }
 
-  const all = getLocalItem(LOCAL_NOTES_KEY, DEFAULT_NOTES);
-  return all.filter(n => {
-    const instMatch = n.institute === 'All' || !institute || n.institute === institute;
-    const specMatch = n.specialization === 'All' || n.specialization === 'All Specializations' ||
-                      !specialization || n.specialization === specialization;
+  const all = getLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
+  const filtered = all.filter(n => {
+    const instMatch = !n.institute || n.institute === 'All' || !institute || n.institute === institute;
+    const specMatch = !n.specialization || n.specialization === 'All' || n.specialization === 'All Specializations' ||
+                      !specialization || n.specialization === specialization ||
+                      n.specialization.toLowerCase().includes(String(specialization).toLowerCase()) ||
+                      String(specialization).toLowerCase().includes(n.specialization.toLowerCase());
     return instMatch && specMatch;
   });
+
+  if (filtered.length === 0 && all.length > 0) {
+    return all;
+  }
+  return filtered;
 }
 
 export async function getAllNotes() {
@@ -1130,11 +1127,15 @@ export async function getAllNotes() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTES_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_notes'), { list: SAMPLE_NOTES }, { merge: true });
+      saveLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
+      return SAMPLE_NOTES;
     }
   } catch (e) {
     console.warn('Firestore getAllNotes warning:', e.message);
   }
-  return getLocalItem(LOCAL_NOTES_KEY, DEFAULT_NOTES);
+  return getLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
 }
 
 export async function createNote(note) {
@@ -1146,7 +1147,7 @@ export async function createNote(note) {
     uploadDate: new Date().toISOString().slice(0, 10)
   };
 
-  const notes = getLocalItem(LOCAL_NOTES_KEY, DEFAULT_NOTES);
+  const notes = getLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
   notes.unshift(newNote);
   saveLocalItem(LOCAL_NOTES_KEY, notes);
 
@@ -1161,7 +1162,7 @@ export async function createNote(note) {
 }
 
 export async function deleteNote(noteId) {
-  const notes = getLocalItem(LOCAL_NOTES_KEY, DEFAULT_NOTES);
+  const notes = getLocalItem(LOCAL_NOTES_KEY, SAMPLE_NOTES);
   const filtered = notes.filter(n => n.id !== noteId);
   saveLocalItem(LOCAL_NOTES_KEY, filtered);
 
@@ -1182,12 +1183,15 @@ export async function getTimetable(institute, semester) {
     const snap = await getDoc(doc(db, 'student_list', 'sync_timetables'));
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_TIMETABLE_KEY, snap.data().list);
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_timetables'), { list: SAMPLE_TIMETABLES }, { merge: true });
+      saveLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
     }
   } catch (e) {
     console.warn('Firestore getTimetable fetch warning:', e.message);
   }
 
-  const all = getLocalItem(LOCAL_TIMETABLE_KEY, DEFAULT_TIMETABLES);
+  const all = getLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
   const found = all.find(t => t.institute === institute && (!semester || t.semester === semester));
   if (found) return found;
   return all.find(t => t.institute === institute) || all[0] || null;
@@ -1199,15 +1203,19 @@ export async function getAllTimetables() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_TIMETABLE_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_timetables'), { list: SAMPLE_TIMETABLES }, { merge: true });
+      saveLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
+      return SAMPLE_TIMETABLES;
     }
   } catch (e) {
     console.warn('Firestore getAllTimetables warning:', e.message);
   }
-  return getLocalItem(LOCAL_TIMETABLE_KEY, DEFAULT_TIMETABLES);
+  return getLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
 }
 
 export async function saveTimetable(timetableData) {
-  const all = getLocalItem(LOCAL_TIMETABLE_KEY, DEFAULT_TIMETABLES);
+  const all = getLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
   const id = timetableData.id || `tt-${timetableData.institute}-${(timetableData.semester || 'sem1').replace(/\s+/g, '-').toLowerCase()}`;
   const record = { ...timetableData, id };
 
@@ -1230,7 +1238,7 @@ export async function saveTimetable(timetableData) {
 }
 
 export async function deleteTimetable(id) {
-  const all = getLocalItem(LOCAL_TIMETABLE_KEY, DEFAULT_TIMETABLES);
+  const all = getLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
   const filtered = all.filter(t => t.id !== id);
   saveLocalItem(LOCAL_TIMETABLE_KEY, filtered);
 
@@ -1245,7 +1253,7 @@ export async function deleteTimetable(id) {
 }
 
 export async function batchUploadTimetable(institute, semester, slotsArray) {
-  const all = getLocalItem(LOCAL_TIMETABLE_KEY, DEFAULT_TIMETABLES);
+  const all = getLocalItem(LOCAL_TIMETABLE_KEY, SAMPLE_TIMETABLES);
   const id = `tt-${institute}-${(semester || 'sem1').replace(/\s+/g, '-').toLowerCase()}`;
   const record = {
     id,
@@ -1280,13 +1288,19 @@ export async function getNotices(institute) {
     const snap = await getDoc(doc(db, 'student_list', 'sync_notices'));
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTICES_KEY, snap.data().list);
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_notices'), { list: SAMPLE_NOTICES }, { merge: true });
+      saveLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
     }
   } catch (e) {
     console.warn('Firestore getNotices fetch warning:', e.message);
   }
 
-  const all = getLocalItem(LOCAL_NOTICES_KEY, DEFAULT_NOTICES);
-  const filtered = all.filter(n => n.institute === 'All' || !institute || n.institute === institute);
+  const all = getLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
+  const filtered = all.filter(n => !n.institute || n.institute === 'All' || !institute || n.institute === institute);
+  if (filtered.length === 0 && all.length > 0) {
+    return all.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+  }
   return filtered.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
 }
 
@@ -1296,11 +1310,15 @@ export async function getAllNotices() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTICES_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_notices'), { list: SAMPLE_NOTICES }, { merge: true });
+      saveLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
+      return SAMPLE_NOTICES;
     }
   } catch (e) {
     console.warn('Firestore getAllNotices warning:', e.message);
   }
-  return getLocalItem(LOCAL_NOTICES_KEY, DEFAULT_NOTICES);
+  return getLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
 }
 
 export async function createNotice(notice) {
@@ -1310,7 +1328,7 @@ export async function createNotice(notice) {
     date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   };
 
-  const all = getLocalItem(LOCAL_NOTICES_KEY, DEFAULT_NOTICES);
+  const all = getLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
   all.unshift(newNotice);
   saveLocalItem(LOCAL_NOTICES_KEY, all);
 
@@ -1325,7 +1343,7 @@ export async function createNotice(notice) {
 }
 
 export async function updateNotice(id, data) {
-  const all = getLocalItem(LOCAL_NOTICES_KEY, DEFAULT_NOTICES);
+  const all = getLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
   const idx = all.findIndex(n => n.id === id);
   if (idx >= 0) {
     all[idx] = { ...all[idx], ...data };
@@ -1343,7 +1361,7 @@ export async function updateNotice(id, data) {
 }
 
 export async function deleteNotice(id) {
-  const all = getLocalItem(LOCAL_NOTICES_KEY, DEFAULT_NOTICES);
+  const all = getLocalItem(LOCAL_NOTICES_KEY, SAMPLE_NOTICES);
   const filtered = all.filter(n => n.id !== id);
   saveLocalItem(LOCAL_NOTICES_KEY, filtered);
 
@@ -1365,11 +1383,15 @@ export async function getDailyNews() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NEWS_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_news'), { list: SAMPLE_NEWS }, { merge: true });
+      saveLocalItem(LOCAL_NEWS_KEY, SAMPLE_NEWS);
+      return SAMPLE_NEWS;
     }
   } catch (e) {
     console.warn('Firestore getDailyNews warning:', e.message);
   }
-  return getLocalItem(LOCAL_NEWS_KEY, DEFAULT_NEWS);
+  return getLocalItem(LOCAL_NEWS_KEY, SAMPLE_NEWS);
 }
 
 export async function createDailyNews(newsItem) {
@@ -1379,7 +1401,7 @@ export async function createDailyNews(newsItem) {
     date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   };
 
-  const all = getLocalItem(LOCAL_NEWS_KEY, DEFAULT_NEWS);
+  const all = getLocalItem(LOCAL_NEWS_KEY, SAMPLE_NEWS);
   all.unshift(newNews);
   saveLocalItem(LOCAL_NEWS_KEY, all);
 
@@ -1394,7 +1416,7 @@ export async function createDailyNews(newsItem) {
 }
 
 export async function deleteDailyNews(id) {
-  const all = getLocalItem(LOCAL_NEWS_KEY, DEFAULT_NEWS);
+  const all = getLocalItem(LOCAL_NEWS_KEY, SAMPLE_NEWS);
   const filtered = all.filter(n => n.id !== id);
   saveLocalItem(LOCAL_NEWS_KEY, filtered);
 
@@ -1416,12 +1438,16 @@ export async function getActiveNotifications() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTIF_KEY, snap.data().list);
       return snap.data().list.filter(n => n.isActive !== false);
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_notifications'), { list: SAMPLE_NOTIFICATIONS }, { merge: true });
+      saveLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
+      return SAMPLE_NOTIFICATIONS.filter(n => n.isActive !== false);
     }
   } catch (e) {
     console.warn('Firestore getActiveNotifications warning:', e.message);
   }
 
-  const all = getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  const all = getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
   return all.filter(n => n.isActive !== false);
 }
 
@@ -1431,11 +1457,15 @@ export async function getAllNotifications() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_NOTIF_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_notifications'), { list: SAMPLE_NOTIFICATIONS }, { merge: true });
+      saveLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
+      return SAMPLE_NOTIFICATIONS;
     }
   } catch (e) {
     console.warn('Firestore getAllNotifications warning:', e.message);
   }
-  return getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  return getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
 }
 
 export async function createNotification(notif) {
@@ -1447,7 +1477,7 @@ export async function createNotification(notif) {
     date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   };
 
-  const all = getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  const all = getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
   all.unshift(newNotif);
   saveLocalItem(LOCAL_NOTIF_KEY, all);
 
@@ -1462,7 +1492,7 @@ export async function createNotification(notif) {
 }
 
 export async function toggleNotificationStatus(id) {
-  const all = getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  const all = getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
   const idx = all.findIndex(n => n.id === id);
   if (idx >= 0) {
     all[idx].isActive = !all[idx].isActive;
@@ -1480,7 +1510,7 @@ export async function toggleNotificationStatus(id) {
 }
 
 export async function markNotificationAsRead(id) {
-  const all = getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  const all = getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
   const idx = all.findIndex(n => n.id === id);
   if (idx >= 0) {
     all[idx].read = true;
@@ -1490,7 +1520,7 @@ export async function markNotificationAsRead(id) {
 }
 
 export async function deleteNotification(id) {
-  const all = getLocalItem(LOCAL_NOTIF_KEY, DEFAULT_NOTIFICATIONS);
+  const all = getLocalItem(LOCAL_NOTIF_KEY, SAMPLE_NOTIFICATIONS);
   const filtered = all.filter(n => n.id !== id);
   saveLocalItem(LOCAL_NOTIF_KEY, filtered);
 
@@ -1511,13 +1541,18 @@ export async function getFaculty(institute) {
     const snap = await getDoc(doc(db, 'student_list', 'sync_faculty'));
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_FACULTY_KEY, snap.data().list);
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_faculty'), { list: SAMPLE_FACULTY }, { merge: true });
+      saveLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
     }
   } catch (e) {
     console.warn('Firestore getFaculty warning:', e.message);
   }
 
-  const all = getLocalItem(LOCAL_FACULTY_KEY, DEFAULT_FACULTY);
-  return all.filter(f => f.institute === 'All' || !institute || f.institute === institute);
+  const all = getLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
+  const filtered = all.filter(f => !f.institute || f.institute === 'All' || !institute || f.institute === institute);
+  if (filtered.length === 0 && all.length > 0) return all;
+  return filtered;
 }
 
 export async function getAllFaculty() {
@@ -1526,11 +1561,15 @@ export async function getAllFaculty() {
     if (snap.exists() && snap.data()?.list) {
       saveLocalItem(LOCAL_FACULTY_KEY, snap.data().list);
       return snap.data().list;
+    } else {
+      await setDoc(doc(db, 'student_list', 'sync_faculty'), { list: SAMPLE_FACULTY }, { merge: true });
+      saveLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
+      return SAMPLE_FACULTY;
     }
   } catch (e) {
     console.warn('Firestore getAllFaculty warning:', e.message);
   }
-  return getLocalItem(LOCAL_FACULTY_KEY, DEFAULT_FACULTY);
+  return getLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
 }
 
 export async function createFaculty(facultyMember) {
@@ -1539,7 +1578,7 @@ export async function createFaculty(facultyMember) {
     id: facultyMember.id || 'fac-' + Date.now()
   };
 
-  const all = getLocalItem(LOCAL_FACULTY_KEY, DEFAULT_FACULTY);
+  const all = getLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
   all.unshift(newFaculty);
   saveLocalItem(LOCAL_FACULTY_KEY, all);
 
@@ -1554,7 +1593,7 @@ export async function createFaculty(facultyMember) {
 }
 
 export async function deleteFaculty(id) {
-  const all = getLocalItem(LOCAL_FACULTY_KEY, DEFAULT_FACULTY);
+  const all = getLocalItem(LOCAL_FACULTY_KEY, SAMPLE_FACULTY);
   const filtered = all.filter(f => f.id !== id);
   saveLocalItem(LOCAL_FACULTY_KEY, filtered);
 
