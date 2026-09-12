@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { verifyRollNumber, isAlreadyRegistered, registerStudent } from '../firebase/service';
@@ -12,7 +12,7 @@ export default function Register() {
   const navigate = useNavigate();
   const { login, student, role, loading: authLoading } = useAuth();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!authLoading && student) {
       if (role === 'admin' || student.role === 'admin') {
         navigate('/admin/dashboard', { replace: true });
